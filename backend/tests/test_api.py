@@ -28,7 +28,7 @@ def client(tmp_path, monkeypatch):
 
 
 def register_and_login(client):
-    res = client.post("/api/register", json={"username": "test", "password": "test"})
+    res = client.post("/register", json={"username": "test", "password": "test"})
     assert res.status_code == 200
     token = res.json()["access_token"]
     return token
@@ -38,7 +38,7 @@ def test_register_login_flow(client):
     token = register_and_login(client)
     assert token
 
-    res = client.post("/api/login", json={"username": "test", "password": "test"})
+    res = client.post("/login", json={"username": "test", "password": "test"})
     assert res.status_code == 200
 
 
@@ -55,14 +55,14 @@ def test_asset_crud_and_summary(client, monkeypatch):
     monkeypatch.setattr("backend.main.get_price_krw", fake_price)
 
     res = client.post(
-        "/api/assets",
+        "/assets",
         headers={"Authorization": f"Bearer {token}"},
         json={"name": "Apple", "symbol": "AAPL", "asset_type": "stock", "quantity": 2},
     )
     assert res.status_code == 200
 
     res = client.post(
-        "/api/refresh",
+        "/refresh",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 200
@@ -72,7 +72,7 @@ def test_asset_crud_and_summary(client, monkeypatch):
 
     asset_id = data["assets"][0]["id"]
     res = client.delete(
-        f"/api/assets/{asset_id}",
+        f"/assets/{asset_id}",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 200
@@ -81,7 +81,7 @@ def test_asset_crud_and_summary(client, monkeypatch):
 def test_update_asset_quantity(client):
     token = register_and_login(client)
     res = client.post(
-        "/api/assets",
+        "/assets",
         headers={"Authorization": f"Bearer {token}"},
         json={"name": "Apple", "symbol": "AAPL", "asset_type": "stock", "quantity": 2},
     )
@@ -89,7 +89,7 @@ def test_update_asset_quantity(client):
     asset_id = res.json()["id"]
 
     res = client.put(
-        f"/api/assets/{asset_id}",
+        f"/assets/{asset_id}",
         headers={"Authorization": f"Bearer {token}"},
         json={"quantity": 5},
     )
@@ -100,7 +100,7 @@ def test_update_asset_quantity(client):
 def test_custom_asset_add(client):
     token = register_and_login(client)
     res = client.post(
-        "/api/assets",
+        "/assets",
         headers={"Authorization": f"Bearer {token}"},
         json={"name": "예금", "symbol": "예금", "asset_type": "예금", "quantity": 3},
     )
@@ -124,7 +124,7 @@ def test_btc_add_uses_upbit_price(client, monkeypatch):
     monkeypatch.setattr("backend.main.get_price_krw", fake_price)
 
     res = client.post(
-        "/api/assets",
+        "/assets",
         headers={"Authorization": f"Bearer {token}"},
         json={"name": "Bitcoin", "symbol": "BTC", "asset_type": "crypto", "quantity": 1},
     )
@@ -146,7 +146,7 @@ def test_kr_stock_add_uses_pykrx_price(client, monkeypatch):
     monkeypatch.setattr("backend.main.get_price_krw", fake_price)
 
     res = client.post(
-        "/api/assets",
+        "/assets",
         headers={"Authorization": f"Bearer {token}"},
         json={"name": "Samsung", "symbol": "005930", "asset_type": "kr_stock", "quantity": 1},
     )
@@ -158,7 +158,7 @@ def test_kr_stock_add_uses_pykrx_price(client, monkeypatch):
 def test_cash_asset_add(client):
     token = register_and_login(client)
     res = client.post(
-        "/api/assets",
+        "/assets",
         headers={"Authorization": f"Bearer {token}"},
         json={"name": "현금", "symbol": "CASH", "asset_type": "cash", "quantity": 5},
     )
@@ -173,7 +173,7 @@ def test_daily_totals_and_pagination(client):
     token = register_and_login(client)
 
     res = client.post(
-        "/api/assets",
+        "/assets",
         headers={"Authorization": f"Bearer {token}"},
         json={"name": "예금", "symbol": "예금", "asset_type": "예금", "quantity": 2},
     )
@@ -196,14 +196,14 @@ def test_daily_totals_and_pagination(client):
         db.close()
 
     res = client.get(
-        "/api/totals?period=daily&limit=2&offset=0",
+        "/totals?period=daily&limit=2&offset=0",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 200
     assert len(res.json()) == 2
 
     res = client.get(
-        "/api/totals/detail?period=daily&limit=2&offset=0",
+        "/totals/detail?period=daily&limit=2&offset=0",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 200
@@ -212,7 +212,7 @@ def test_daily_totals_and_pagination(client):
     assert payload["assets"][0]["id"] == asset_id
 
     res = client.get(
-        "/api/totals/detail?period=daily&limit=2&offset=2",
+        "/totals/detail?period=daily&limit=2&offset=2",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 200
@@ -223,20 +223,26 @@ def test_daily_totals_and_pagination(client):
 def test_snapshot_totals_creates_daily_total(client):
     token = register_and_login(client)
     res = client.post(
-        "/api/assets",
+        "/assets",
         headers={"Authorization": f"Bearer {token}"},
-        json={"name": "예금", "symbol": "예금", "asset_type": "예금", "quantity": 4},
+        json={
+            "name": "예금",
+            "symbol": "예금",
+            "asset_type": "예금",
+            "quantity": 4,
+            "price_krw": 10000.0,
+        },
     )
     assert res.status_code == 200
 
     res = client.post(
-        "/api/totals/snapshot",
+        "/totals/snapshot",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 200
 
     res = client.get(
-        "/api/totals?period=daily&limit=1&offset=0",
+        "/totals?period=daily&limit=1&offset=0",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 200
