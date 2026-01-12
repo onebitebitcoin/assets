@@ -146,7 +146,8 @@ disown "${BACKEND_PID}"
 echo "Backend started with PID ${BACKEND_PID} (detached)"
 
 echo "Starting frontend on ${FRONTEND_PORT}..."
-nohup npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" > "${LOG_DIR}/frontend.log" 2>&1 &
+VITE_API_BASE="${VITE_API_BASE:-https://ubuntu.golden-ghost.ts.net:8443/api}" \
+  nohup npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" > "${LOG_DIR}/frontend.log" 2>&1 &
 FRONTEND_PID=$!
 echo "${FRONTEND_PID}" > "${PID_DIR}/frontend.pid"
 disown "${FRONTEND_PID}"
