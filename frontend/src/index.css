@@ -312,6 +312,10 @@ button:disabled {
   border: 1px solid rgba(148, 163, 184, 0.15);
 }
 
+.panel.full {
+  grid-column: 1 / -1;
+}
+
 .panel-header {
   display: flex;
   align-items: center;
@@ -481,6 +485,14 @@ button:disabled {
 
   .auth-visual {
     display: block;
+  }
+
+  .asset-list {
+    gap: 0.6rem;
+  }
+
+  .asset-item {
+    padding: 0.6rem 1rem;
   }
 }
 

@@ -202,7 +202,85 @@ const EditAssets = () => {
       ) : null}
 
       <section className="grid">
-        <div className="panel">
+        <div className="panel full">
+          <h3>새 자산 추가</h3>
+          <form className="asset-form" onSubmit={onAddAsset}>
+            <label>
+              자산 이름
+              <input
+                name="name"
+                value={assetForm.name}
+                onChange={(event) =>
+                  setAssetForm((prev) => ({ ...prev, name: event.target.value }))
+                }
+                placeholder="Apple, Bitcoin"
+                required
+              />
+            </label>
+            <label>
+              유형
+              <select
+                name="asset_type"
+                value={assetForm.asset_type}
+                onChange={(event) =>
+                  setAssetForm((prev) => ({ ...prev, asset_type: event.target.value }))
+                }
+              >
+                <option value="stock">미국 주식</option>
+                <option value="crypto">비트코인</option>
+                <option value="custom">직접 입력</option>
+              </select>
+            </label>
+            {assetForm.asset_type === "custom" ? (
+              <label>
+                직접 입력 유형
+                <input
+                  name="custom_type"
+                  value={assetForm.custom_type}
+                  onChange={(event) =>
+                    setAssetForm((prev) => ({ ...prev, custom_type: event.target.value }))
+                  }
+                  placeholder="예금, IRP 계좌"
+                  required
+                />
+              </label>
+            ) : null}
+            <label>
+              심볼
+              <input
+                name="symbol"
+                value={assetForm.symbol}
+                onChange={(event) =>
+                  setAssetForm((prev) => ({ ...prev, symbol: event.target.value }))
+                }
+                placeholder={assetForm.asset_type === "crypto" ? "BTC" : "AAPL"}
+                disabled={assetForm.asset_type !== "stock"}
+                required
+              />
+            </label>
+            <label>
+              {assetForm.asset_type === "custom" ? "금액(만원)" : "수량"}
+              <input
+                name="quantity"
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                value={assetForm.quantity}
+                onChange={(event) =>
+                  setAssetForm((prev) => ({ ...prev, quantity: event.target.value }))
+                }
+                required
+              />
+            </label>
+            <button className="primary" type="submit">
+              자산 추가
+            </button>
+          </form>
+          <p className="muted">비트코인과 직접 입력 자산만 지원합니다.</p>
+        </div>
+
+        <div className="panel full">
           <div className="panel-header">
             <h3>보유 자산</h3>
             <button className="ghost small" onClick={onRefresh} disabled={refreshing}>
@@ -341,84 +419,6 @@ const EditAssets = () => {
           ) : (
             <p className="muted">아직 등록된 자산이 없습니다.</p>
           )}
-        </div>
-
-        <div className="panel">
-          <h3>새 자산 추가</h3>
-          <form className="asset-form" onSubmit={onAddAsset}>
-            <label>
-              자산 이름
-              <input
-                name="name"
-                value={assetForm.name}
-                onChange={(event) =>
-                  setAssetForm((prev) => ({ ...prev, name: event.target.value }))
-                }
-                placeholder="Apple, Bitcoin"
-                required
-              />
-            </label>
-            <label>
-              유형
-              <select
-                name="asset_type"
-                value={assetForm.asset_type}
-                onChange={(event) =>
-                  setAssetForm((prev) => ({ ...prev, asset_type: event.target.value }))
-                }
-              >
-                <option value="stock">미국 주식</option>
-                <option value="crypto">비트코인</option>
-                <option value="custom">직접 입력</option>
-              </select>
-            </label>
-            {assetForm.asset_type === "custom" ? (
-              <label>
-                직접 입력 유형
-                <input
-                  name="custom_type"
-                  value={assetForm.custom_type}
-                  onChange={(event) =>
-                    setAssetForm((prev) => ({ ...prev, custom_type: event.target.value }))
-                  }
-                  placeholder="예금, IRP 계좌"
-                  required
-                />
-              </label>
-            ) : null}
-            <label>
-              심볼
-              <input
-                name="symbol"
-                value={assetForm.symbol}
-                onChange={(event) =>
-                  setAssetForm((prev) => ({ ...prev, symbol: event.target.value }))
-                }
-                placeholder={assetForm.asset_type === "crypto" ? "BTC" : "AAPL"}
-                disabled={assetForm.asset_type !== "stock"}
-                required
-              />
-            </label>
-            <label>
-              {assetForm.asset_type === "custom" ? "금액(만원)" : "수량"}
-              <input
-                name="quantity"
-                type="number"
-                min="1"
-                step="1"
-                inputMode="numeric"
-                value={assetForm.quantity}
-                onChange={(event) =>
-                  setAssetForm((prev) => ({ ...prev, quantity: event.target.value }))
-                }
-                required
-              />
-            </label>
-            <button className="primary" type="submit">
-              자산 추가
-            </button>
-          </form>
-          <p className="muted">비트코인과 직접 입력 자산만 지원합니다.</p>
         </div>
       </section>
     </div>
