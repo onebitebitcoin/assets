@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Usage: ./get_prod.sh <username> <password>
 
-API_BASE="https://ubuntu.golden-ghost.ts.net/api"
+API_BASE="${API_BASE:-https://ubuntu.golden-ghost.ts.net/api}"
 USERNAME="${1:-}"
 PASSWORD="${2:-}"
 
@@ -19,8 +19,13 @@ fi
 
 echo "Checking backend..."
 if ! curl -sf "${API_BASE}/health" >/dev/null; then
-  echo "Error: Backend is not running at ${API_BASE}"
-  exit 1
+  echo "Warn: ${API_BASE}/health unreachable. Trying localhost..." >&2
+  if curl -sf "http://127.0.0.1:50000/health" >/dev/null; then
+    API_BASE="http://127.0.0.1:50000"
+  else
+    echo "Error: Backend is not running at ${API_BASE}"
+    exit 1
+  fi
 fi
 
 TOKEN=$(curl -sf -X POST "${API_BASE}/login" \
