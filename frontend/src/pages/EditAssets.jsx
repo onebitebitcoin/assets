@@ -11,13 +11,21 @@ import {
 } from "../api.js";
 import { formatKRW, formatUSD } from "../utils/format.js";
 
-const emptyAsset = { name: "", symbol: "", asset_type: "stock", quantity: 1, custom_type: "" };
+const emptyAsset = {
+  name: "",
+  symbol: "",
+  asset_type: "stock",
+  quantity: 1,
+  custom_type: "",
+  price_krw: ""
+};
 
 const EditAssets = () => {
   const navigate = useNavigate();
   const [assets, setAssets] = useState([]);
   const [assetForm, setAssetForm] = useState(emptyAsset);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [warnings, setWarnings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -28,13 +36,29 @@ const EditAssets = () => {
   const [symbolEdits, setSymbolEdits] = useState({});
   const [typeEdits, setTypeEdits] = useState({});
   const [addOpen, setAddOpen] = useState(false);
+  const [sortMode, setSortMode] = useState("value");
 
-  const loadAssets = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await listAssets();
-      const sorted = [...data].sort((a, b) => {
+  const parseUpdatedAt = (value) => {
+    if (!value) {
+      return 0;
+    }
+    const raw = typeof value === "string" ? value : value.toString();
+    const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
+    const date = new Date(hasTimezone ? raw : `${raw}Z`);
+    if (Number.isNaN(date.getTime())) {
+      return 0;
+    }
+    return date.getTime();
+  };
+
+  const sortAssets = (list, mode) => {
+    const sorted = [...list];
+    if (mode === "updated") {
+      sorted.sort((a, b) => {
+        const delta = parseUpdatedAt(b.last_updated) - parseUpdatedAt(a.last_updated);
+        if (delta !== 0) {
+          return delta;
+        }
         const aValue = a.value_krw ?? (a.last_price_krw || 0) * a.quantity;
         const bValue = b.value_krw ?? (b.last_price_krw || 0) * b.quantity;
         if (bValue !== aValue) {
@@ -42,7 +66,26 @@ const EditAssets = () => {
         }
         return a.name.localeCompare(b.name, "ko-KR");
       });
-      setAssets(sorted);
+      return sorted;
+    }
+    sorted.sort((a, b) => {
+      const aValue = a.value_krw ?? (a.last_price_krw || 0) * a.quantity;
+      const bValue = b.value_krw ?? (b.last_price_krw || 0) * b.quantity;
+      if (bValue !== aValue) {
+        return bValue - aValue;
+      }
+      return a.name.localeCompare(b.name, "ko-KR");
+    });
+    return sorted;
+  };
+
+  const loadAssets = async () => {
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    try {
+      const data = await listAssets();
+      setAssets(sortAssets(data, sortMode));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -53,6 +96,10 @@ const EditAssets = () => {
   useEffect(() => {
     loadAssets();
   }, []);
+
+  useEffect(() => {
+    setAssets((prev) => sortAssets(prev, sortMode));
+  }, [sortMode]);
 
   useEffect(() => {
     if (!assets.length) {
@@ -119,10 +166,14 @@ const EditAssets = () => {
   const onRefresh = async () => {
     setRefreshing(true);
     setError("");
+    setSuccess("");
     try {
       const data = await refreshSummary();
-      setAssets(data.assets);
+      setAssets(sortAssets(data.assets, sortMode));
       setWarnings(data.errors || []);
+      if (!data.errors || data.errors.length === 0) {
+        setSuccess("가격 업데이트가 완료되었습니다.");
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -133,9 +184,16 @@ const EditAssets = () => {
   const onRefreshAsset = async (assetId) => {
     setRefreshingAssets((prev) => ({ ...prev, [assetId]: true }));
     setError("");
+    setSuccess("");
     try {
       const updated = await refreshAsset(assetId);
-      setAssets((prev) => prev.map((item) => (item.id === assetId ? updated : item)));
+      setAssets((prev) =>
+        sortAssets(
+          prev.map((item) => (item.id === assetId ? updated : item)),
+          sortMode
+        )
+      );
+      setSuccess("가격이 업데이트되었습니다.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -146,14 +204,11 @@ const EditAssets = () => {
   const onAddAsset = async (event) => {
     event.preventDefault();
     setError("");
+    setSuccess("");
     try {
       const quantityValue = Number(assetForm.quantity);
       if (!Number.isInteger(quantityValue) || quantityValue <= 0) {
-        setError(
-          assetForm.asset_type === "custom"
-            ? "금액은 1 이상의 정수(만원)만 가능합니다."
-            : "수량은 1 이상의 정수만 가능합니다."
-        );
+        setError("수량은 1 이상의 정수만 가능합니다.");
         return;
       }
       const isCustom = assetForm.asset_type === "custom";
@@ -161,6 +216,14 @@ const EditAssets = () => {
       if (isCustom && !customType) {
         setError("직접 입력 유형을 입력해 주세요.");
         return;
+      }
+      let priceValue = null;
+      if (isCustom) {
+        priceValue = Number(assetForm.price_krw);
+        if (!Number.isFinite(priceValue) || priceValue <= 0) {
+          setError("단가는 1 이상의 숫자만 가능합니다.");
+          return;
+        }
       }
       await addAsset({
         name: assetForm.name,
@@ -172,10 +235,12 @@ const EditAssets = () => {
             : assetForm.asset_type === "cash"
               ? "CASH"
               : assetForm.symbol.trim().toUpperCase(),
-        quantity: quantityValue
+        quantity: quantityValue,
+        ...(priceValue ? { price_krw: priceValue } : {})
       });
       setAssetForm(emptyAsset);
       await onRefresh();
+      setSuccess("자산이 추가되었습니다.");
     } catch (err) {
       setError(err.message);
     }
@@ -185,6 +250,7 @@ const EditAssets = () => {
     try {
       await deleteAsset(id);
       await loadAssets();
+      setSuccess("자산이 삭제되었습니다.");
     } catch (err) {
       setError(err.message);
     }
@@ -233,6 +299,7 @@ const EditAssets = () => {
       </header>
 
       {error ? <p className="error">{error}</p> : null}
+      {success ? <p className="success">{success}</p> : null}
       {warnings.length ? (
         <div className="warning">
           {warnings.map((message) => (
@@ -249,6 +316,14 @@ const EditAssets = () => {
               <button className="ghost small" onClick={onRefresh} disabled={refreshing}>
                 {refreshing ? "업데이트 중" : "가격 업데이트"}
               </button>
+              <select
+                className="asset-sort-select"
+                value={sortMode}
+                onChange={(event) => setSortMode(event.target.value)}
+              >
+                <option value="value">총금액순</option>
+                <option value="updated">최근 업데이트</option>
+              </select>
               <button
                 className="ghost small"
                 type="button"
@@ -326,7 +401,7 @@ const EditAssets = () => {
                   />
                 </label>
                 <label>
-                  {["custom", "cash"].includes(assetForm.asset_type) ? "금액(만원)" : "수량"}
+                  {assetForm.asset_type === "cash" ? "금액(만원)" : "수량"}
                   <input
                     name="quantity"
                     type="number"
@@ -340,6 +415,23 @@ const EditAssets = () => {
                     required
                   />
                 </label>
+                {assetForm.asset_type === "custom" ? (
+                  <label>
+                    단가(원)
+                    <input
+                      name="price_krw"
+                      type="number"
+                      min="1"
+                      step="1"
+                      inputMode="numeric"
+                      value={assetForm.price_krw}
+                      onChange={(event) =>
+                        setAssetForm((prev) => ({ ...prev, price_krw: event.target.value }))
+                      }
+                      required
+                    />
+                  </label>
+                ) : null}
                 <button className="primary" type="submit">
                   자산 추가
                 </button>
@@ -501,6 +593,7 @@ const EditAssets = () => {
                               !hasChanges
                             }
                             onClick={() => {
+                              setSuccess("");
                               const name = nameEdits[asset.id]?.trim();
                               if (!name) {
                                 setError("이름을 입력해주세요.");
@@ -533,8 +626,12 @@ const EditAssets = () => {
                               })
                                 .then((updated) => {
                                   setAssets((prev) =>
-                                    prev.map((item) => (item.id === asset.id ? updated : item))
+                                    sortAssets(
+                                      prev.map((item) => (item.id === asset.id ? updated : item)),
+                                      sortMode
+                                    )
                                   );
+                                  setSuccess("저장되었습니다.");
                                 })
                                 .catch((err) => {
                                   setError(err.message);
