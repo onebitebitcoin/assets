@@ -13,8 +13,8 @@ import { Bar, Line } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
 import {
   clearToken,
-  fetchSummary,
   fetchTotalsDetail,
+  refreshSummary,
   snapshotTotals
 } from "../api.js";
 import { formatDelta, formatKRW, formatUSD } from "../utils/format.js";
@@ -51,7 +51,7 @@ const Dashboard = () => {
 
   const loadSummary = async () => {
     try {
-      const data = await fetchSummary();
+      const data = await refreshSummary();
       setSummary(data);
     } catch (err) {
       setError(err.message);
