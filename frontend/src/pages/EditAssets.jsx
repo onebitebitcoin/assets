@@ -194,7 +194,9 @@ const EditAssets = () => {
     if (!value) {
       return "-";
     }
-    const date = new Date(value);
+    const raw = typeof value === "string" ? value : value.toString();
+    const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
+    const date = new Date(hasTimezone ? raw : `${raw}Z`);
     if (Number.isNaN(date.getTime())) {
       return "-";
     }
@@ -202,7 +204,8 @@ const EditAssets = () => {
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
-      minute: "2-digit"
+      minute: "2-digit",
+      timeZone: "Asia/Seoul"
     }).format(date);
   };
 

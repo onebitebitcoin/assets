@@ -107,8 +107,8 @@ def test_custom_asset_add(client):
     assert res.status_code == 200
     data = res.json()
     assert data["asset_type"] == "예금"
-    assert data["last_price_krw"] == 10000.0
-    assert data["value_krw"] == 30000.0
+    assert data["last_price_krw"] == 0.0
+    assert data["value_krw"] == 0.0
 
 
 def test_btc_add_uses_upbit_price(client, monkeypatch):
@@ -165,8 +165,8 @@ def test_cash_asset_add(client):
     assert res.status_code == 200
     data = res.json()
     assert data["asset_type"] == "cash"
-    assert data["last_price_krw"] == 10000.0
-    assert data["value_krw"] == 50000.0
+    assert data["last_price_krw"] == 0.0
+    assert data["value_krw"] == 0.0
 
 
 def test_daily_totals_and_pagination(client):

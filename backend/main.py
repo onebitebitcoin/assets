@@ -45,6 +45,15 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
+
+
+def now_seoul() -> datetime:
+    return datetime.now(tz=SEOUL_TZ)
+
+
+def today_seoul() -> date:
+    return datetime.now(tz=SEOUL_TZ).date()
 
 Base.metadata.create_all(bind=engine)
 def ensure_assets_columns():
@@ -156,20 +165,20 @@ async def add_asset(
         price = await get_price_krw(symbol, asset_type)
         asset.last_price_krw = price.price_krw
         asset.last_price_usd = price.price_usd
-        asset.last_updated = datetime.utcnow()
+        asset.last_updated = now_seoul()
     elif asset_type == "kr_stock":
         price = await get_price_krw(symbol, asset_type)
         asset.last_price_krw = price.price_krw
-        asset.last_updated = datetime.utcnow()
+        asset.last_updated = now_seoul()
     else:
         if payload.price_krw is not None:
             asset.last_price_krw = payload.price_krw
         if payload.price_usd is not None:
             asset.last_price_usd = payload.price_usd
         if asset.last_price_krw is not None or asset.last_price_usd is not None:
-            asset.last_updated = datetime.utcnow()
+            asset.last_updated = now_seoul()
     if asset_type not in {"stock", "crypto", "kr_stock"} and asset.last_price_krw is None:
-        asset.last_price_krw = 10000.0
+        asset.last_price_krw = 0.0
     db.add(asset)
     db.commit()
     db.refresh(asset)
@@ -209,7 +218,7 @@ def update_asset(
     asset.quantity = payload.quantity
     if payload.price_krw is not None:
         asset.last_price_krw = payload.price_krw
-        asset.last_updated = datetime.utcnow()
+        asset.last_updated = now_seoul()
     db.commit()
     db.refresh(asset)
     return asset_to_out(asset)
@@ -227,14 +236,15 @@ async def refresh_single_asset(
 
     asset_type = asset.asset_type.lower()
     if asset_type not in {"stock", "crypto", "kr_stock"}:
-        asset.last_price_krw = 10000.0
-        asset.last_updated = datetime.utcnow()
+        if asset.last_price_krw is None:
+            asset.last_price_krw = 0.0
+        asset.last_updated = now_seoul()
     else:
         try:
             price = await get_price_krw(asset.symbol, asset_type)
             asset.last_price_krw = price.price_krw
             asset.last_price_usd = price.price_usd
-            asset.last_updated = datetime.utcnow()
+            asset.last_updated = now_seoul()
         except Exception as exc:
             logger.exception("Price fetch failed for %s", asset.symbol)
             raise HTTPException(
@@ -259,7 +269,8 @@ async def refresh_prices(
     for asset in assets:
         asset_type = asset.asset_type.lower()
         if asset_type not in {"stock", "crypto", "kr_stock"}:
-            asset.last_price_krw = 10000.0
+            if asset.last_price_krw is None:
+                asset.last_price_krw = 0.0
             total += asset.last_price_krw * asset.quantity
             asset_totals.append((asset, asset.last_price_krw * asset.quantity))
             continue
@@ -267,7 +278,7 @@ async def refresh_prices(
             price = await get_price_krw(asset.symbol, asset_type)
             asset.last_price_krw = price.price_krw
             asset.last_price_usd = price.price_usd
-            asset.last_updated = datetime.utcnow()
+            asset.last_updated = now_seoul()
             total += price.price_krw * asset.quantity
             asset_totals.append((asset, price.price_krw * asset.quantity))
         except Exception as exc:
@@ -279,7 +290,7 @@ async def refresh_prices(
             else:
                 asset_totals.append((asset, 0.0))
 
-    today = date.today()
+    today = today_seoul()
     upsert_daily_total(db, user.id, total, today)
     for asset, total_krw in asset_totals:
         upsert_daily_asset_total(db, user.id, asset.id, total_krw, today)
@@ -416,7 +427,7 @@ def snapshot_totals(
 ):
     asset_totals = compute_asset_totals(user.id, db)
     total = sum(total for _, total in asset_totals)
-    today = date.today()
+    today = today_seoul()
     upsert_daily_total(db, user.id, total, today)
     for asset, total_krw in asset_totals:
         upsert_daily_asset_total(db, user.id, asset.id, total_krw, today)
@@ -425,7 +436,7 @@ def snapshot_totals(
 
 
 def compute_daily_change(user_id: int, db: Session) -> float:
-    today = date.today()
+    today = today_seoul()
     yesterday = today - timedelta(days=1)
     today_total = db.scalar(
         select(DailyTotal.total_krw).where(
@@ -452,8 +463,8 @@ def compute_asset_totals(user_id: int, db: Session) -> list[tuple[Asset, float]]
     totals: list[tuple[Asset, float]] = []
     for asset in assets:
         asset_type = asset.asset_type.lower()
-        if asset_type not in {"stock", "crypto"}:
-            asset.last_price_krw = 10000.0
+        if asset_type not in {"stock", "crypto", "kr_stock"} and asset.last_price_krw is None:
+            asset.last_price_krw = 0.0
         totals.append((asset, (asset.last_price_krw or 0) * asset.quantity))
     return totals
 
@@ -553,7 +564,7 @@ def run_daily_snapshot():
     db = SessionLocal()
     try:
         users = db.scalars(select(User)).all()
-        today = date.today()
+        today = today_seoul()
         for user in users:
             asset_totals = compute_asset_totals(user.id, db)
             total = sum(total for _, total in asset_totals)
