@@ -177,18 +177,25 @@ else
 fi
 
 SERVE_PIDS=()
+SERVE_LOG_DIR="${ROOT_DIR}/logs"
+mkdir -p "${SERVE_LOG_DIR}"
 
 apply_serve() {
   local path="$1"
   local target="$2"
   local attempt=1
+  local log_file="${SERVE_LOG_DIR}/tailscale-serve-$(echo "${path}" | tr '/' '_').log"
+
   while [[ "${attempt}" -le 5 ]]; do
     local output
     if [[ "${SERVE_USE_AMPERSAND}" == "true" ]]; then
       # Run with nohup and detach when --bg is not available
-      # Redirect all output to avoid blocking
-      nohup tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" "${target}" >/dev/null 2>&1 &
+      # Log output for debugging
+      echo "Attempt ${attempt}: Running tailscale serve --https=${EXTERNAL_PORT} --set-path=${path} ${target}" > "${log_file}"
+      nohup tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" "${target}" >> "${log_file}" 2>&1 &
       local serve_pid=$!
+      echo "Started process PID: ${serve_pid}" >> "${log_file}"
+
       # Detach the process so it survives script termination
       disown "${serve_pid}" 2>/dev/null || true
       # Store PID for potential cleanup
@@ -197,8 +204,19 @@ apply_serve() {
       # Give it time to start and register
       sleep 2
 
+      # Check if process is still alive
+      if ! kill -0 "${serve_pid}" 2>/dev/null; then
+        echo "Process ${serve_pid} died. Log:" >&2
+        cat "${log_file}" >&2
+      fi
+
       # Check if tailscale serve command succeeded
-      if tailscale serve status 2>&1 | grep -q "${path}"; then
+      local serve_status
+      serve_status=$(tailscale serve status 2>&1)
+      echo "Serve status:" >> "${log_file}"
+      echo "${serve_status}" >> "${log_file}"
+
+      if echo "${serve_status}" | grep -q "${path}"; then
         echo "Successfully configured serve path: ${path}"
         return 0
       fi
@@ -206,6 +224,7 @@ apply_serve() {
       # Check for etag mismatch by trying to read any error output
       # Since we can't easily capture output with nohup, try again on failure
       echo "Serve config may be busy, retrying (${attempt}/5)..."
+      echo "Full log: ${log_file}"
       # Kill the process we just started
       kill "${serve_pid}" 2>/dev/null || true
       sleep 1
@@ -224,6 +243,10 @@ apply_serve() {
     fi
   done
   echo "Failed to update serve config after retries." >&2
+  if [[ -f "${log_file}" ]]; then
+    echo "Last attempt log contents:" >&2
+    cat "${log_file}" >&2
+  fi
   return 1
 }
 
