@@ -9,7 +9,7 @@ import {
   PointElement,
   Tooltip
 } from "chart.js";
-import { Doughnut, Line } from "react-chartjs-2";
+import { Line, Pie } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
 import {
   clearToken,
@@ -206,8 +206,7 @@ const Dashboard = () => {
           label: (context) => `${context.label}: ${formatKRW(context.parsed)}`
         }
       }
-    },
-    cutout: "55%"
+    }
   };
   const chartOptions = {
     responsive: true,
@@ -282,7 +281,7 @@ const Dashboard = () => {
         </div>
         <div className="chart-canvas">
           {allocationHasData ? (
-            <Doughnut data={allocationData} options={allocationOptions} />
+            <Pie data={allocationData} options={allocationOptions} />
           ) : (
             <p className="muted">데이터가 없습니다.</p>
           )}
