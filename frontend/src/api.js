@@ -1,4 +1,6 @@
-const API_BASE = "http://127.0.0.1:50000";
+const normalizeApiBase = (value) => (value ? value.replace(/\/+$/, "") : "");
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE) || "http://127.0.0.1:50000";
+let didLogBase = false;
 
 export const getToken = () => localStorage.getItem("token");
 export const setToken = (token) => localStorage.setItem("token", token);
@@ -11,6 +13,10 @@ const request = async (path, options = {}) => {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers
   };
+  if (!didLogBase && import.meta.env.MODE !== "test") {
+    console.info("[api] API_BASE:", API_BASE);
+    didLogBase = true;
+  }
   let res;
   try {
     res = await fetch(`${API_BASE}${path}`, { ...options, headers });
