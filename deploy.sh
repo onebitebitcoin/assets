@@ -93,12 +93,8 @@ fi
 echo "Tailscale status:"
 tailscale status | head -5
 
-echo "Checking tailscale serve support..."
-if tailscale serve --help 2>/dev/null | grep -q -- "--bg"; then
-  echo "✓ Tailscale serve --bg flag is supported"
-else
-  echo "⚠ Tailscale serve --bg flag is NOT supported (will use nohup workaround)"
-fi
+echo "Tailscale version:"
+tailscale version
 
 if port_in_use "${FRONTEND_PORT}"; then
   kill_port "${FRONTEND_PORT}"
@@ -168,15 +164,6 @@ for i in {1..30}; do
   sleep 1
 done
 
-SERVE_BG_FLAG=""
-SERVE_USE_AMPERSAND=false
-if tailscale serve --help 2>/dev/null | grep -q -- "--bg"; then
-  SERVE_BG_FLAG="--bg"
-else
-  SERVE_USE_AMPERSAND=true
-fi
-
-SERVE_PIDS=()
 SERVE_LOG_DIR="${ROOT_DIR}/logs"
 mkdir -p "${SERVE_LOG_DIR}"
 
@@ -187,64 +174,73 @@ apply_serve() {
   local log_file="${SERVE_LOG_DIR}/tailscale-serve-$(echo "${path}" | tr '/' '_').log"
 
   while [[ "${attempt}" -le 5 ]]; do
+    # ALWAYS use --bg flag for persistent configuration
+    # Without --bg, the config only exists while the foreground process runs
+    echo "Attempt ${attempt}: Running tailscale serve --https=${EXTERNAL_PORT} --bg --set-path=${path} ${target}" > "${log_file}"
+
     local output
-    if [[ "${SERVE_USE_AMPERSAND}" == "true" ]]; then
-      # Run with nohup and detach when --bg is not available
-      # Log output for debugging
-      echo "Attempt ${attempt}: Running tailscale serve --https=${EXTERNAL_PORT} --set-path=${path} ${target}" > "${log_file}"
-      nohup tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" "${target}" >> "${log_file}" 2>&1 &
-      local serve_pid=$!
-      echo "Started process PID: ${serve_pid}" >> "${log_file}"
+    output=$(tailscale serve --https="${EXTERNAL_PORT}" --bg --set-path="${path}" "${target}" 2>&1)
+    local exit_code=$?
 
-      # Detach the process so it survives script termination
-      disown "${serve_pid}" 2>/dev/null || true
-      # Store PID for potential cleanup
-      SERVE_PIDS+=("${serve_pid}")
+    echo "Exit code: ${exit_code}" >> "${log_file}"
+    echo "Output:" >> "${log_file}"
+    echo "${output}" >> "${log_file}"
 
-      # Give it time to start and register
-      sleep 2
+    if [[ ${exit_code} -eq 0 ]]; then
+      # Give it a moment to register
+      sleep 1
 
-      # Check if process is still alive
-      if ! kill -0 "${serve_pid}" 2>/dev/null; then
-        echo "Process ${serve_pid} died. Log:" >&2
-        cat "${log_file}" >&2
-      fi
-
-      # Check if tailscale serve command succeeded
+      # Verify the config was set
       local serve_status
       serve_status=$(tailscale serve status 2>&1)
       echo "Serve status:" >> "${log_file}"
       echo "${serve_status}" >> "${log_file}"
 
       if echo "${serve_status}" | grep -q "${path}"; then
-        echo "Successfully configured serve path: ${path}"
+        echo "✓ Successfully configured serve path: ${path}"
         return 0
+      else
+        echo "Warning: Command succeeded but path not found in status" >&2
+        cat "${log_file}" >&2
       fi
+    fi
 
-      # Check for etag mismatch by trying to read any error output
-      # Since we can't easily capture output with nohup, try again on failure
-      echo "Serve config may be busy, retrying (${attempt}/5)..."
-      echo "Full log: ${log_file}"
-      # Kill the process we just started
-      kill "${serve_pid}" 2>/dev/null || true
+    # Check if it was an etag mismatch (concurrent modification)
+    if echo "${output}" | grep -qi "etag mismatch"; then
+      echo "Serve config busy, retrying (${attempt}/5)..."
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    # Check if --bg flag is not supported
+    if echo "${output}" | grep -qi "unknown flag.*--bg\|flag provided but not defined.*--bg"; then
+      echo "ERROR: tailscale serve --bg flag is not supported on this version" >&2
+      echo "Please upgrade tailscale to a version that supports --bg flag:" >&2
+      echo "  sudo tailscale update" >&2
+      echo "" >&2
+      echo "Current tailscale version:" >&2
+      tailscale version >&2
+      return 1
+    fi
+
+    # Other error
+    echo "Failed to configure serve path (${attempt}/5):" >&2
+    echo "${output}" >&2
+
+    if [[ ${attempt} -lt 5 ]]; then
       sleep 1
       attempt=$((attempt + 1))
       continue
     else
-      output=$(tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" ${SERVE_BG_FLAG} "${target}" 2>&1) && return 0
-      if echo "${output}" | grep -qi "etag mismatch"; then
-        echo "Serve config busy, retrying (${attempt}/5)..."
-        sleep 1
-        attempt=$((attempt + 1))
-        continue
-      fi
-      echo "${output}" >&2
-      return 1
+      break
     fi
   done
-  echo "Failed to update serve config after retries." >&2
+
+  echo "" >&2
+  echo "Failed to update serve config after ${attempt} retries." >&2
   if [[ -f "${log_file}" ]]; then
-    echo "Last attempt log contents:" >&2
+    echo "Last attempt log:" >&2
     cat "${log_file}" >&2
   fi
   return 1
@@ -272,11 +268,8 @@ echo ""
 
 if tailscale serve status 2>&1 | grep -q "no serve config"; then
   echo "WARNING: No serve config detected. The configuration may not have persisted." >&2
-  echo "This can happen if tailscale serve requires the --bg flag or sudo privileges." >&2
-  if [[ "${SERVE_USE_AMPERSAND}" == "true" ]]; then
-    echo "Note: Running without --bg flag. Tailscale serve processes:" >&2
-    ps aux | grep "[t]ailscale serve" || echo "No tailscale serve processes found" >&2
-  fi
+  echo "This usually indicates that tailscale serve --bg failed to save the configuration." >&2
+  echo "Check the logs in ${SERVE_LOG_DIR}/ for details." >&2
 fi
 
 echo "Services are running. Press Ctrl+C to stop."
