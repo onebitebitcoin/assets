@@ -11,10 +11,23 @@ const request = async (path, options = {}) => {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers
   };
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch (err) {
+    const reason = err instanceof Error && err.message ? err.message : "서버에 연결할 수 없습니다.";
+    throw new Error(`네트워크 오류: ${reason}`);
+  }
   if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(detail.detail || "Request failed");
+    let detail = "";
+    try {
+      const data = await res.json();
+      detail = data.detail || data.message || "";
+    } catch (err) {
+      detail = await res.text().catch(() => "");
+    }
+    const reason = detail || res.statusText || "Request failed";
+    throw new Error(reason);
   }
   return res.json();
 };
