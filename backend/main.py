@@ -202,6 +202,8 @@ def update_asset(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
     if payload.name is not None:
         asset.name = payload.name
+    if payload.symbol is not None:
+        asset.symbol = payload.symbol
     if payload.asset_type is not None:
         asset.asset_type = payload.asset_type
     asset.quantity = payload.quantity

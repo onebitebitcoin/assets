@@ -25,6 +25,7 @@ const EditAssets = () => {
   const [quantityEdits, setQuantityEdits] = useState({});
   const [priceEdits, setPriceEdits] = useState({});
   const [nameEdits, setNameEdits] = useState({});
+  const [symbolEdits, setSymbolEdits] = useState({});
   const [typeEdits, setTypeEdits] = useState({});
   const [addOpen, setAddOpen] = useState(false);
 
@@ -57,6 +58,7 @@ const EditAssets = () => {
     if (!assets.length) {
       setQuantityEdits({});
       setNameEdits({});
+      setSymbolEdits({});
       setTypeEdits({});
       setPriceEdits({});
       return;
@@ -64,10 +66,12 @@ const EditAssets = () => {
     const next = {};
     const nextPrices = {};
     const nextNames = {};
+    const nextSymbols = {};
     const nextTypes = {};
     assets.forEach((asset) => {
       next[asset.id] = String(Math.trunc(asset.quantity));
       nextNames[asset.id] = asset.name || "";
+      nextSymbols[asset.id] = asset.symbol || "";
       nextTypes[asset.id] = asset.asset_type || "stock";
       if (isCustomType(asset.asset_type)) {
         nextPrices[asset.id] = asset.last_price_krw ? String(asset.last_price_krw) : "";
@@ -76,6 +80,7 @@ const EditAssets = () => {
     setQuantityEdits(next);
     setPriceEdits(nextPrices);
     setNameEdits(nextNames);
+    setSymbolEdits(nextSymbols);
     setTypeEdits(nextTypes);
   }, [assets]);
 
@@ -349,6 +354,7 @@ const EditAssets = () => {
                 const isCustom = isCustomType(asset.asset_type);
                 const hasChanges =
                   nameEdits[asset.id] !== asset.name ||
+                  symbolEdits[asset.id] !== asset.symbol ||
                   typeEdits[asset.id] !== asset.asset_type ||
                   parseQuantityInput(quantityEdits[asset.id]) !== Math.trunc(asset.quantity) ||
                   (isCustom && parsePriceInput(priceEdits[asset.id]) !== asset.last_price_krw);
@@ -399,6 +405,20 @@ const EditAssets = () => {
                               }))
                             }
                             placeholder="자산 이름"
+                          />
+                        </label>
+                        <label>
+                          <span className="label-text">심볼</span>
+                          <input
+                            type="text"
+                            value={symbolEdits[asset.id] ?? ""}
+                            onChange={(event) =>
+                              setSymbolEdits((prev) => ({
+                                ...prev,
+                                [asset.id]: event.target.value
+                              }))
+                            }
+                            placeholder="종목코드"
                           />
                         </label>
                         <label>
@@ -472,6 +492,7 @@ const EditAssets = () => {
                             type="button"
                             disabled={
                               !nameEdits[asset.id]?.trim() ||
+                              !symbolEdits[asset.id]?.trim() ||
                               !parseQuantityInput(quantityEdits[asset.id]) ||
                               (isCustom && !parsePriceInput(priceEdits[asset.id])) ||
                               !hasChanges
@@ -480,6 +501,11 @@ const EditAssets = () => {
                               const name = nameEdits[asset.id]?.trim();
                               if (!name) {
                                 setError("이름을 입력해주세요.");
+                                return;
+                              }
+                              const symbol = symbolEdits[asset.id]?.trim();
+                              if (!symbol) {
+                                setError("심볼을 입력해주세요.");
                                 return;
                               }
                               const value = parseQuantityInput(quantityEdits[asset.id]);
@@ -497,6 +523,7 @@ const EditAssets = () => {
                               }
                               updateAsset(asset.id, {
                                 name,
+                                symbol: symbolEdits[asset.id],
                                 asset_type: typeEdits[asset.id],
                                 quantity: value,
                                 ...(priceValue ? { price_krw: priceValue } : {})
