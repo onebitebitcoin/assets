@@ -5,6 +5,7 @@ import {
   clearToken,
   deleteAsset,
   listAssets,
+  refreshAsset,
   refreshSummary,
   updateAsset
 } from "../api.js";
@@ -20,6 +21,7 @@ const EditAssets = () => {
   const [warnings, setWarnings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshingAssets, setRefreshingAssets] = useState({});
   const [quantityEdits, setQuantityEdits] = useState({});
   const [priceEdits, setPriceEdits] = useState({});
   const [nameEdits, setNameEdits] = useState({});
@@ -64,33 +66,18 @@ const EditAssets = () => {
     const nextNames = {};
     const nextTypes = {};
     assets.forEach((asset) => {
-      // Only set if not already set (for initial load and new assets)
-      if (!(asset.id in quantityEdits)) {
-        next[asset.id] = String(Math.trunc(asset.quantity));
-      }
-      if (!(asset.id in nameEdits)) {
-        nextNames[asset.id] = asset.name || "";
-      }
-      if (!(asset.id in typeEdits)) {
-        nextTypes[asset.id] = asset.asset_type || "stock";
-      }
-      if (isCustomType(asset.asset_type) && !(asset.id in priceEdits)) {
+      next[asset.id] = String(Math.trunc(asset.quantity));
+      nextNames[asset.id] = asset.name || "";
+      nextTypes[asset.id] = asset.asset_type || "stock";
+      if (isCustomType(asset.asset_type)) {
         nextPrices[asset.id] = asset.last_price_krw ? String(asset.last_price_krw) : "";
       }
     });
-    if (Object.keys(next).length > 0) {
-      setQuantityEdits((prev) => ({ ...prev, ...next }));
-    }
-    if (Object.keys(nextPrices).length > 0) {
-      setPriceEdits((prev) => ({ ...prev, ...nextPrices }));
-    }
-    if (Object.keys(nextNames).length > 0) {
-      setNameEdits((prev) => ({ ...prev, ...nextNames }));
-    }
-    if (Object.keys(nextTypes).length > 0) {
-      setTypeEdits((prev) => ({ ...prev, ...nextTypes }));
-    }
-  }, [assets, quantityEdits, nameEdits, typeEdits, priceEdits]);
+    setQuantityEdits(next);
+    setPriceEdits(nextPrices);
+    setNameEdits(nextNames);
+    setTypeEdits(nextTypes);
+  }, [assets]);
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -135,6 +122,19 @@ const EditAssets = () => {
       setError(err.message);
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const onRefreshAsset = async (assetId) => {
+    setRefreshingAssets((prev) => ({ ...prev, [assetId]: true }));
+    setError("");
+    try {
+      const updated = await refreshAsset(assetId);
+      setAssets((prev) => prev.map((item) => (item.id === assetId ? updated : item)));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRefreshingAssets((prev) => ({ ...prev, [assetId]: false }));
     }
   };
 
@@ -365,12 +365,23 @@ const EditAssets = () => {
                         </p>
                       </div>
                       <div className="asset-edit-value">
-                        <p className="asset-total-krw">{formatKRW(asset.value_krw)}</p>
-                        {!isCustom && (
-                          <p className="asset-meta">
-                            {formatUSD(asset.last_price_usd ? asset.last_price_usd * asset.quantity : null)}
-                          </p>
-                        )}
+                        <div>
+                          <p className="asset-total-krw">{formatKRW(asset.value_krw)}</p>
+                          {!isCustom && (
+                            <p className="asset-meta">
+                              {formatUSD(asset.last_price_usd ? asset.last_price_usd * asset.quantity : null)}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          className="ghost small"
+                          onClick={() => onRefreshAsset(asset.id)}
+                          disabled={refreshingAssets[asset.id]}
+                          type="button"
+                          title="가격 업데이트"
+                        >
+                          {refreshingAssets[asset.id] ? "..." : "↻"}
+                        </button>
                       </div>
                     </div>
 
@@ -494,25 +505,6 @@ const EditAssets = () => {
                                   setAssets((prev) =>
                                     prev.map((item) => (item.id === asset.id ? updated : item))
                                   );
-                                  setNameEdits((prev) => ({
-                                    ...prev,
-                                    [asset.id]: updated.name || ""
-                                  }));
-                                  setTypeEdits((prev) => ({
-                                    ...prev,
-                                    [asset.id]: updated.asset_type || "stock"
-                                  }));
-                                  setQuantityEdits((prev) => ({
-                                    ...prev,
-                                    [asset.id]: String(Math.trunc(updated.quantity))
-                                  }));
-                                  const updatedIsCustom = isCustomType(updated.asset_type);
-                                  if (updatedIsCustom && updated.last_price_krw) {
-                                    setPriceEdits((prev) => ({
-                                      ...prev,
-                                      [asset.id]: String(updated.last_price_krw)
-                                    }));
-                                  }
                                 })
                                 .catch((err) => {
                                   setError(err.message);

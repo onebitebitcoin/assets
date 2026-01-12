@@ -110,11 +110,13 @@ def _fetch_krx_close_price(symbol: str) -> float:
 
 
 async def fetch_kr_stock_krw_price(symbol: str) -> float:
-    cached = _get_cached(f"kr_stock:{symbol}")
+    # Remove exchange suffix (.KS, .KQ) if present
+    clean_symbol = symbol.split('.')[0]
+    cached = _get_cached(f"kr_stock:{clean_symbol}")
     if cached is not None:
         return cached
-    price = await asyncio.to_thread(_fetch_krx_close_price, symbol)
-    _set_cache(f"kr_stock:{symbol}", price)
+    price = await asyncio.to_thread(_fetch_krx_close_price, clean_symbol)
+    _set_cache(f"kr_stock:{clean_symbol}", price)
     return price
 
 

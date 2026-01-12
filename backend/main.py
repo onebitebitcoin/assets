@@ -213,6 +213,38 @@ def update_asset(
     return asset_to_out(asset)
 
 
+@app.post("/assets/{asset_id}/refresh", response_model=AssetOut)
+async def refresh_single_asset(
+    asset_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    asset = db.scalar(select(Asset).where(and_(Asset.id == asset_id, Asset.user_id == user.id)))
+    if not asset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+
+    asset_type = asset.asset_type.lower()
+    if asset_type not in {"stock", "crypto", "kr_stock"}:
+        asset.last_price_krw = 10000.0
+        asset.last_updated = datetime.utcnow()
+    else:
+        try:
+            price = await get_price_krw(asset.symbol, asset_type)
+            asset.last_price_krw = price.price_krw
+            asset.last_price_usd = price.price_usd
+            asset.last_updated = datetime.utcnow()
+        except Exception as exc:
+            logger.exception("Price fetch failed for %s", asset.symbol)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"{asset.symbol} 가격 정보를 가져오지 못했습니다."
+            )
+
+    db.commit()
+    db.refresh(asset)
+    return asset_to_out(asset)
+
+
 @app.post("/refresh", response_model=SummaryOut)
 async def refresh_prices(
     user: Annotated[User, Depends(get_current_user)],

@@ -45,6 +45,7 @@ export const addAsset = (payload) => request("/assets", { method: "POST", body: 
 export const updateAsset = (id, payload) =>
   request(`/assets/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 export const deleteAsset = (id) => request(`/assets/${id}`, { method: "DELETE" });
+export const refreshAsset = (id) => request(`/assets/${id}/refresh`, { method: "POST" });
 export const refreshSummary = () => request("/refresh", { method: "POST" });
 export const fetchSummary = () => request("/summary");
 export const fetchTotals = (period = "daily", limit = 12, offset = 0) =>
