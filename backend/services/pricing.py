@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+from datetime import date, timedelta
 from dataclasses import dataclass
 from time import time
 from typing import Optional
@@ -92,6 +94,30 @@ async def fetch_btc_krw_price(client: httpx.AsyncClient) -> float:
     return price
 
 
+def _fetch_krx_close_price(symbol: str) -> float:
+    from pykrx import stock
+
+    today = date.today()
+    for offset in range(0, 7):
+        target_date = today - timedelta(days=offset)
+        day = target_date.strftime("%Y%m%d")
+        data = stock.get_market_ohlcv_by_date(day, day, symbol)
+        if data is None or data.empty:
+            continue
+        close = data["종가"].iloc[-1]
+        return float(close)
+    raise ValueError(f"No price data for {symbol}")
+
+
+async def fetch_kr_stock_krw_price(symbol: str) -> float:
+    cached = _get_cached(f"kr_stock:{symbol}")
+    if cached is not None:
+        return cached
+    price = await asyncio.to_thread(_fetch_krx_close_price, symbol)
+    _set_cache(f"kr_stock:{symbol}", price)
+    return price
+
+
 async def get_price_krw(symbol: str, asset_type: str) -> PriceResult:
     async with httpx.AsyncClient() as client:
         if asset_type == "stock":
@@ -114,6 +140,16 @@ async def get_price_krw(symbol: str, asset_type: str) -> PriceResult:
                         price_usd=cached,
                     )
             raise
+        if asset_type == "kr_stock":
+            try:
+                krw_price = await fetch_kr_stock_krw_price(symbol)
+                return PriceResult(price_krw=krw_price, source="pykrx")
+            except Exception as exc:
+                cached = _get_cached(f"kr_stock:{symbol}", allow_stale=True)
+                if cached is not None:
+                    logger.warning("Using cached KR stock price for %s after error: %s", symbol, exc)
+                    return PriceResult(price_krw=cached, source="cache")
+                raise
         if asset_type == "crypto" and symbol.upper() == "BTC":
             try:
                 btc_price = await fetch_btc_krw_price(client)

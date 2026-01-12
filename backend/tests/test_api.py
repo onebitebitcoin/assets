@@ -133,6 +133,28 @@ def test_btc_add_uses_upbit_price(client, monkeypatch):
     assert data["last_price_krw"] == 42000000.0
 
 
+def test_kr_stock_add_uses_pykrx_price(client, monkeypatch):
+    token = register_and_login(client)
+
+    async def fake_price(_symbol, _asset_type):
+        class Price:
+            price_krw = 73000.0
+            price_usd = None
+
+        return Price()
+
+    monkeypatch.setattr("backend.main.get_price_krw", fake_price)
+
+    res = client.post(
+        "/api/assets",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"name": "Samsung", "symbol": "005930", "asset_type": "kr_stock", "quantity": 1},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["last_price_krw"] == 73000.0
+
+
 def test_daily_totals_and_pagination(client):
     token = register_and_login(client)
 

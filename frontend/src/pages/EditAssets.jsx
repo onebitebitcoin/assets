@@ -93,7 +93,7 @@ const EditAssets = () => {
     return parsed;
   };
 
-  const isCustomType = (value) => !["stock", "crypto"].includes(value);
+  const isCustomType = (value) => !["stock", "crypto", "kr_stock"].includes(value);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -239,6 +239,7 @@ const EditAssets = () => {
                   }
                 >
                   <option value="stock">미국 주식</option>
+                  <option value="kr_stock">국내 주식</option>
                   <option value="crypto">비트코인</option>
                   <option value="custom">직접 입력</option>
                 </select>
@@ -265,8 +266,14 @@ const EditAssets = () => {
                   onChange={(event) =>
                     setAssetForm((prev) => ({ ...prev, symbol: event.target.value }))
                   }
-                  placeholder={assetForm.asset_type === "crypto" ? "BTC" : "AAPL"}
-                  disabled={assetForm.asset_type !== "stock"}
+                  placeholder={
+                    assetForm.asset_type === "crypto"
+                      ? "BTC"
+                      : assetForm.asset_type === "kr_stock"
+                        ? "005930"
+                        : "AAPL"
+                  }
+                  disabled={!["stock", "kr_stock"].includes(assetForm.asset_type)}
                   required
                 />
               </label>
@@ -289,7 +296,7 @@ const EditAssets = () => {
                 자산 추가
               </button>
             </form>
-            <p className="muted">비트코인과 직접 입력 자산만 지원합니다.</p>
+            <p className="muted">미국/국내 주식, 비트코인, 직접 입력 자산만 지원합니다.</p>
           </div>
         </div>
 

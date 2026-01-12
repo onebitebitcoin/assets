@@ -157,6 +157,10 @@ async def add_asset(
         asset.last_price_krw = price.price_krw
         asset.last_price_usd = price.price_usd
         asset.last_updated = datetime.utcnow()
+    elif asset_type == "kr_stock":
+        price = await get_price_krw(symbol, asset_type)
+        asset.last_price_krw = price.price_krw
+        asset.last_updated = datetime.utcnow()
     else:
         if payload.price_krw is not None:
             asset.last_price_krw = payload.price_krw
@@ -164,7 +168,7 @@ async def add_asset(
             asset.last_price_usd = payload.price_usd
         if asset.last_price_krw is not None or asset.last_price_usd is not None:
             asset.last_updated = datetime.utcnow()
-    if asset_type not in {"stock", "crypto"} and asset.last_price_krw is None:
+    if asset_type not in {"stock", "crypto", "kr_stock"} and asset.last_price_krw is None:
         asset.last_price_krw = 10000.0
     db.add(asset)
     db.commit()
@@ -216,7 +220,7 @@ async def refresh_prices(
     errors: list[str] = []
     for asset in assets:
         asset_type = asset.asset_type.lower()
-        if asset_type not in {"stock", "crypto"}:
+        if asset_type not in {"stock", "crypto", "kr_stock"}:
             asset.last_price_krw = 10000.0
             total += asset.last_price_krw * asset.quantity
             asset_totals.append((asset, asset.last_price_krw * asset.quantity))
