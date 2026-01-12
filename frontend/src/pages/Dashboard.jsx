@@ -15,7 +15,7 @@ import {
   fetchTotalsDetail,
   snapshotTotals
 } from "../api.js";
-import { formatDelta, formatKRW } from "../utils/format.js";
+import { formatDelta, formatKRW, formatUSD } from "../utils/format.js";
 
 ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip);
 
@@ -98,6 +98,17 @@ const Dashboard = () => {
   };
   const chartSeries = [...periodTotals].reverse();
   const chartValues = chartSeries.map((item) => item.total_krw || 0);
+  const assetMetaById = new Map(summary.assets.map((asset) => [asset.id, asset]));
+  const sortedTableColumns = [...tableColumns].sort((a, b) => {
+    const aMeta = assetMetaById.get(a.id);
+    const bMeta = assetMetaById.get(b.id);
+    const aValue = (aMeta?.last_price_krw || 0) * (aMeta?.quantity || 0);
+    const bValue = (bMeta?.last_price_krw || 0) * (bMeta?.quantity || 0);
+    if (bValue !== aValue) {
+      return bValue - aValue;
+    }
+    return a.name.localeCompare(b.name, "ko-KR");
+  });
   const formatAxisDate = (value) => {
     if (!value) return "-";
     const date = new Date(value);
@@ -116,6 +127,11 @@ const Dashboard = () => {
     if (current > previous) return "delta-up";
     if (current < previous) return "delta-down";
     return "";
+  };
+  const formatQuantity = (value) => {
+    if (value === null || value === undefined) return "-";
+    const rounded = Math.round(value * 1000000) / 1000000;
+    return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 6 }).format(rounded);
   };
   const chartLabels = chartSeries.map((item) => formatAxisDate(item.period_start));
   const chartData = {
@@ -255,35 +271,53 @@ const Dashboard = () => {
             <table className="asset-table">
               <thead>
                 <tr>
-                  <th>날짜</th>
-                  <th>총 자산</th>
-                  {tableColumns.map((asset) => (
-                    <th key={asset.id}>
-                      {asset.name} <span className="muted">({asset.symbol})</span>
-                    </th>
+                  <th className="asset-name-col">종목</th>
+                  <th>수량</th>
+                  <th>현재가(USD)</th>
+                  {periodTotals.map((row, index) => (
+                    <th key={`${row.period_start}-${index}`}>{formatAxisDate(row.period_start)}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {periodTotals.map((row, index) => {
-                  const prev = periodTotals[index + 1];
-                  const totalClass = getDeltaClass(row.total_krw, prev?.total_krw);
-                  return (
-                    <tr key={`${row.period_start}-${index}`}>
-                      <td>{formatAxisDate(row.period_start)}</td>
-                      <td className={totalClass}>{formatKRW(row.total_krw)}</td>
-                      {(row.assets || []).map((asset) => {
-                        const prevAsset = prev?.assets?.find((item) => item.id === asset.id);
-                        const assetClass = getDeltaClass(asset.total_krw, prevAsset?.total_krw);
-                        return (
-                          <td key={asset.id} className={assetClass}>
-                            {formatKRW(asset.total_krw)}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
+                <tr>
+                  <td className="asset-name-col">총 자산</td>
+                  <td>-</td>
+                  <td>-</td>
+                  {periodTotals.map((row, index) => {
+                    const prev = periodTotals[index + 1];
+                    const totalClass = getDeltaClass(row.total_krw, prev?.total_krw);
+                    return (
+                      <td key={`${row.period_start}-${index}`} className={totalClass}>
+                        {formatKRW(row.total_krw)}
+                      </td>
+                    );
+                  })}
+                </tr>
+                {sortedTableColumns.map((asset) => (
+                  <tr key={asset.id}>
+                    <td className="asset-name-col">
+                      {asset.name} <span className="muted">({asset.symbol})</span>
+                    </td>
+                    <td>{formatQuantity(assetMetaById.get(asset.id)?.quantity)}</td>
+                    <td>
+                      {assetMetaById.get(asset.id)?.last_price_usd
+                        ? formatUSD(assetMetaById.get(asset.id)?.last_price_usd)
+                        : "-"}
+                    </td>
+                    {periodTotals.map((row, index) => {
+                      const current = (row.assets || []).find((item) => item.id === asset.id);
+                      const prev = periodTotals[index + 1];
+                      const prevAsset = prev?.assets?.find((item) => item.id === asset.id);
+                      const assetClass = getDeltaClass(current?.total_krw, prevAsset?.total_krw);
+                      return (
+                        <td key={`${asset.id}-${row.period_start}-${index}`} className={assetClass}>
+                          {formatKRW(current?.total_krw || 0)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

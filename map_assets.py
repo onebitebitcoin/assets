@@ -18,7 +18,7 @@ _CACHE_TTL = 300  # 5 minutes
 
 
 def get_usd_krw_rate() -> float:
-    """Get USD to KRW exchange rate"""
+    """Get USD to KRW exchange rate (free sources)"""
     cache_key = "usdkrw"
     if cache_key in _cache:
         timestamp, rate = _cache[cache_key]
@@ -29,18 +29,32 @@ def get_usd_krw_rate() -> float:
     print("Fetching USD/KRW exchange rate...")
     try:
         with httpx.Client(timeout=10) as client:
-            response = client.get(
-                "https://api.exchangerate.host/latest",
-                params={"base": "USD", "symbols": "KRW"}
-            )
+            response = client.get("https://open.er-api.com/v6/latest/USD")
             response.raise_for_status()
             data = response.json()
-            rate = float(data["rates"]["KRW"])
+            rates = data.get("rates") or {}
+            rate = float(rates["KRW"])
             _cache[cache_key] = (time.time(), rate)
             print(f"USD/KRW rate: {rate:.2f}")
             return rate
     except Exception as e:
-        print(f"Error fetching exchange rate: {e}")
+        print(f"Error fetching primary exchange rate: {e}")
+
+    try:
+        with httpx.Client(timeout=10) as client:
+            response = client.get(
+                "https://api.frankfurter.app/latest",
+                params={"from": "USD", "to": "KRW"},
+            )
+            response.raise_for_status()
+            data = response.json()
+            rates = data.get("rates") or {}
+            rate = float(rates["KRW"])
+            _cache[cache_key] = (time.time(), rate)
+            print(f"USD/KRW rate (fallback): {rate:.2f}")
+            return rate
+    except Exception as e:
+        print(f"Error fetching fallback exchange rate: {e}")
         # Fallback rate
         return 1350.0
 
@@ -147,39 +161,35 @@ def calculate_quantity(asset: Dict[str, Any]) -> Dict[str, Any]:
     if asset_type == "stock":
         # Get stock price
         price_usd = get_stock_price_usd(symbol)
+        price_krw = None
         if price_usd:
             usd_krw_rate = get_usd_krw_rate()
             price_krw = price_usd * usd_krw_rate
             quantity = amount_krw / price_krw
             print(f"  → Quantity: {quantity:.6f} shares (Price: ${price_usd:.2f} / {price_krw:,.0f} KRW)")
         else:
-            print(f"  → Failed to get price, using quantity=1")
+            print("  → Failed to get price, using quantity=1")
             quantity = 1.0
 
-    elif asset_type == "crypto":
-        # Get BTC price
-        if symbol.upper() == "BTC":
-            price_krw = get_btc_price_krw()
-            if price_krw:
-                quantity = amount_krw / price_krw
-                print(f"  → Quantity: {quantity:.8f} BTC")
-            else:
-                print(f"  → Failed to get BTC price, using quantity=1")
-                quantity = 1.0
-        else:
-            print(f"  → Only BTC supported, using quantity=1")
-            quantity = 1.0
+        return {
+            "name": name,
+            "symbol": symbol,
+            "asset_type": asset_type,
+            "quantity": quantity,
+            "price_krw": price_krw,
+            "price_usd": price_usd
+        }
 
-    else:
-        # Custom type: quantity = amount_krw / 10000
-        quantity = amount_krw / 10000.0
-        print(f"  → Quantity: {quantity:.6f} (custom type, price=10000 KRW)")
+    # Non-stock assets are treated as manual entries with quantity=1.
+    manual_symbol = symbol or name
+    print(f"  → Manual asset: quantity=1, price={amount_krw:,.0f} KRW")
 
     return {
         "name": name,
-        "symbol": symbol,
-        "asset_type": asset_type,
-        "quantity": quantity
+        "symbol": manual_symbol,
+        "asset_type": "manual",
+        "quantity": 1.0,
+        "price_krw": amount_krw,
     }
 
 
@@ -218,11 +228,11 @@ def main():
 
     # Summary
     stock_count = sum(1 for a in mapped_assets if a["asset_type"] == "stock")
-    crypto_count = sum(1 for a in mapped_assets if a["asset_type"] == "crypto")
-    other_count = len(mapped_assets) - stock_count - crypto_count
+    manual_count = sum(1 for a in mapped_assets if a["asset_type"] == "manual")
+    other_count = len(mapped_assets) - stock_count - manual_count
     print(f"\nSummary:")
     print(f"  - Stocks: {stock_count}")
-    print(f"  - Crypto: {crypto_count}")
+    print(f"  - Manual: {manual_count}")
     print(f"  - Others: {other_count}")
 
 

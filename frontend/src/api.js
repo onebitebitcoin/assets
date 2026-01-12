@@ -1,4 +1,4 @@
-const API_BASE = "";
+const API_BASE = "http://127.0.0.1:50000";
 
 export const getToken = () => localStorage.getItem("token");
 export const setToken = (token) => localStorage.setItem("token", token);
@@ -19,17 +19,17 @@ const request = async (path, options = {}) => {
   return res.json();
 };
 
-export const register = (payload) => request("/api/register", { method: "POST", body: JSON.stringify(payload) });
-export const login = (payload) => request("/api/login", { method: "POST", body: JSON.stringify(payload) });
-export const listAssets = () => request("/api/assets");
-export const addAsset = (payload) => request("/api/assets", { method: "POST", body: JSON.stringify(payload) });
+export const register = (payload) => request("/register", { method: "POST", body: JSON.stringify(payload) });
+export const login = (payload) => request("/login", { method: "POST", body: JSON.stringify(payload) });
+export const listAssets = () => request("/assets");
+export const addAsset = (payload) => request("/assets", { method: "POST", body: JSON.stringify(payload) });
 export const updateAsset = (id, payload) =>
-  request(`/api/assets/${id}`, { method: "PUT", body: JSON.stringify(payload) });
-export const deleteAsset = (id) => request(`/api/assets/${id}`, { method: "DELETE" });
-export const refreshSummary = () => request("/api/refresh", { method: "POST" });
-export const fetchSummary = () => request("/api/summary");
+  request(`/assets/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+export const deleteAsset = (id) => request(`/assets/${id}`, { method: "DELETE" });
+export const refreshSummary = () => request("/refresh", { method: "POST" });
+export const fetchSummary = () => request("/summary");
 export const fetchTotals = (period = "daily", limit = 12, offset = 0) =>
-  request(`/api/totals?period=${period}&limit=${limit}&offset=${offset}`);
+  request(`/totals?period=${period}&limit=${limit}&offset=${offset}`);
 export const fetchTotalsDetail = (period = "daily", limit = 10, offset = 0) =>
-  request(`/api/totals/detail?period=${period}&limit=${limit}&offset=${offset}`);
-export const snapshotTotals = () => request("/api/totals/snapshot", { method: "POST" });
+  request(`/totals/detail?period=${period}&limit=${limit}&offset=${offset}`);
+export const snapshotTotals = () => request("/totals/snapshot", { method: "POST" });

@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./init.sh <username> <password> <excel1.xlsx> <excel2.xlsx>
+# Usage: ./init.sh <username> <password> [assets.json] [--reset]
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${ROOT_DIR}"
 
+DEFAULT_ASSETS_FILE="assets_from_excel.json"
+
 USERNAME="${1:-}"
 PASSWORD="${2:-}"
-EXCEL1="${3:-}"
-EXCEL2="${4:-}"
-API_BASE="http://localhost:50000"
+ASSETS_FILE="${3:-$DEFAULT_ASSETS_FILE}"
+RESET_MODE="${4:-}"
+API_BASE="${API_BASE:-http://localhost:50000}"
 
 if [[ -z "$USERNAME" ]] || [[ -z "$PASSWORD" ]]; then
-  echo "Usage: ./init.sh <username> <password> <excel1.xlsx> <excel2.xlsx>"
+  echo "Usage: ./init.sh <username> <password> [assets.json] [--reset]"
   echo ""
   echo "Example:"
-  echo "  ./init.sh myusername mypassword \\"
-  echo "    \"/path/to/excel1.xlsx\" \\"
-  echo "    \"/path/to/excel2.xlsx\""
+  echo "  ./init.sh myusername mypassword assets_from_excel.json --reset"
   exit 1
 fi
 
@@ -27,7 +27,6 @@ echo "Asset Import Initialization"
 echo "========================================="
 echo ""
 
-# Check dependencies
 echo "Checking dependencies..."
 for cmd in python3 jq curl; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -38,52 +37,32 @@ done
 echo "✓ All required commands available"
 echo ""
 
-# Install Python dependencies
 echo "Installing Python dependencies..."
-pip3 install -q openpyxl httpx || {
+python3 -m pip install -q httpx || {
   echo "Failed to install Python packages"
   exit 1
 }
 echo "✓ Python packages installed"
 echo ""
 
-# Parse Excel files
 echo "========================================="
-echo "Step 1: Parsing Excel files"
+echo "Step 1: Loading asset list"
 echo "========================================="
-if [[ ! -f "$EXCEL1" ]]; then
-  echo "Error: File not found: $EXCEL1"
+if [[ ! -f "$ASSETS_FILE" ]]; then
+  echo "Error: File not found: $ASSETS_FILE"
   exit 1
-fi
-if [[ -n "$EXCEL2" ]] && [[ ! -f "$EXCEL2" ]]; then
-  echo "Error: File not found: $EXCEL2"
-  exit 1
-fi
-
-if [[ -n "$EXCEL2" ]]; then
-  python3 parse_assets.py "$EXCEL1" "$EXCEL2" || {
-    echo "Failed to parse Excel files"
-    exit 1
-  }
-else
-  python3 parse_assets.py "$EXCEL1" || {
-    echo "Failed to parse Excel file"
-    exit 1
-  }
 fi
 echo ""
 
-# Map assets to API format
 echo "========================================="
 echo "Step 2: Mapping assets and calculating quantities"
 echo "========================================="
-python3 map_assets.py assets_raw.json assets_api.json || {
+python3 map_assets.py "$ASSETS_FILE" assets_api.json || {
   echo "Failed to map assets"
   exit 1
 }
 echo ""
 
-# Check backend is running
 echo "========================================="
 echo "Step 3: Authenticating with backend"
 echo "========================================="
@@ -95,18 +74,17 @@ fi
 echo "✓ Backend is running"
 echo ""
 
-# Register or login
 echo "Authenticating user: $USERNAME"
 TOKEN=$(curl -sf -X POST "${API_BASE}/register" \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}" 2>/dev/null \
-  | jq -r '.access_token' 2>/dev/null || \
+  | jq -r '.access_token // empty' 2>/dev/null || \
   curl -sf -X POST "${API_BASE}/login" \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}" \
-  | jq -r '.access_token')
+  | jq -r '.access_token // empty')
 
-if [[ -z "$TOKEN" ]] || [[ "$TOKEN" == "null" ]]; then
+if [[ -z "$TOKEN" ]]; then
   echo "Error: Failed to authenticate"
   echo "Please check your username and password"
   exit 1
@@ -114,7 +92,33 @@ fi
 echo "✓ Authenticated successfully"
 echo ""
 
-# Create assets
+if [[ "$RESET_MODE" == "--reset" ]]; then
+  echo "========================================="
+  echo "Step 3.5: Clearing existing assets"
+  echo "========================================="
+  EXISTING_ASSETS=$(curl -sf -X GET "${API_BASE}/assets" \
+    -H "Authorization: Bearer $TOKEN" \
+    | jq -c '.[]')
+  if [[ -n "$EXISTING_ASSETS" ]]; then
+    while read -r asset; do
+      ASSET_ID=$(echo "$asset" | jq -r '.id')
+      ASSET_NAME=$(echo "$asset" | jq -r '.name')
+      echo -n "  Deleting: ${ASSET_NAME}... "
+      RESPONSE=$(curl -sf -X DELETE "${API_BASE}/assets/${ASSET_ID}" \
+        -H "Authorization: Bearer $TOKEN" 2>&1) || {
+        echo "FAILED"
+        echo "    Error: $RESPONSE"
+        continue
+      }
+      echo "OK"
+      sleep 0.1
+    done < <(echo "$EXISTING_ASSETS")
+  else
+    echo "  No existing assets found."
+  fi
+  echo ""
+fi
+
 echo "========================================="
 echo "Step 4: Creating assets in database"
 echo "========================================="
@@ -125,7 +129,7 @@ echo ""
 SUCCESS_COUNT=0
 FAILED_COUNT=0
 
-cat assets_api.json | jq -c '.[]' | while read -r asset; do
+while read -r asset; do
   ASSET_NAME=$(echo "$asset" | jq -r '.name')
   echo -n "  Creating: ${ASSET_NAME}... "
 
@@ -142,7 +146,7 @@ cat assets_api.json | jq -c '.[]' | while read -r asset; do
   echo "OK"
   SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
   sleep 0.2
-done
+done < <(jq -c '.[]' assets_api.json)
 
 echo ""
 echo "========================================="
@@ -154,7 +158,6 @@ if [[ ${FAILED_COUNT} -gt 0 ]]; then
 fi
 echo ""
 
-# Verify
 echo "Verifying imported assets..."
 ASSET_COUNT=$(curl -sf -X GET "${API_BASE}/assets" \
   -H "Authorization: Bearer $TOKEN" \
@@ -162,7 +165,6 @@ ASSET_COUNT=$(curl -sf -X GET "${API_BASE}/assets" \
 echo "Total assets in database: ${ASSET_COUNT}"
 echo ""
 
-# Show summary
 echo "Getting portfolio summary..."
 curl -sf -X GET "${API_BASE}/summary" \
   -H "Authorization: Bearer $TOKEN" \

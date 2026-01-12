@@ -425,6 +425,14 @@ button:disabled {
   text-align: left;
 }
 
+.asset-table .asset-name-col {
+  max-width: 200px;
+  width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .asset-table thead th {
   color: #cbd5f5;
   font-size: 0.8rem;
