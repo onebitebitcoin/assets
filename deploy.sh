@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_PORT=50001
 BACKEND_PORT=50000
-EXTERNAL_PORT=443
+EXTERNAL_PORT=8443
 RESET_SERVE=false
 
 for arg in "$@"; do

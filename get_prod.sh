@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Usage: ./get_prod.sh <username> <password>
 
-API_BASE="https://ubuntu.golden-ghost.ts.net/api"
+API_BASE="https://ubuntu.golden-ghost.ts.net:8443/api"
 USERNAME="${1:-}"
 PASSWORD="${2:-}"
 
