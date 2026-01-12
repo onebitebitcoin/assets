@@ -68,6 +68,16 @@ if ! tailscale status >/dev/null 2>&1; then
   tailscale login --qr
 fi
 
+echo "Tailscale status:"
+tailscale status | head -5
+
+echo "Checking tailscale serve support..."
+if tailscale serve --help 2>/dev/null | grep -q -- "--bg"; then
+  echo "✓ Tailscale serve --bg flag is supported"
+else
+  echo "⚠ Tailscale serve --bg flag is NOT supported (will use nohup workaround)"
+fi
+
 if port_in_use "${FRONTEND_PORT}"; then
   kill_port "${FRONTEND_PORT}"
 fi
@@ -115,6 +125,27 @@ FRONTEND_PID=$!
 
 trap 'kill ${BACKEND_PID} ${FRONTEND_PID} 2>/dev/null || true' EXIT
 
+echo "Waiting for services to be ready..."
+for i in {1..30}; do
+  backend_ready=false
+  frontend_ready=false
+
+  if curl -s http://127.0.0.1:${BACKEND_PORT}/health >/dev/null 2>&1 || curl -s http://127.0.0.1:${BACKEND_PORT} >/dev/null 2>&1; then
+    backend_ready=true
+  fi
+
+  if curl -s http://127.0.0.1:${FRONTEND_PORT} >/dev/null 2>&1; then
+    frontend_ready=true
+  fi
+
+  if [[ "${backend_ready}" == "true" ]] && [[ "${frontend_ready}" == "true" ]]; then
+    echo "Both services are ready!"
+    break
+  fi
+
+  sleep 1
+done
+
 SERVE_BG_FLAG=""
 SERVE_USE_AMPERSAND=false
 if tailscale serve --help 2>/dev/null | grep -q -- "--bg"; then
@@ -123,6 +154,8 @@ else
   SERVE_USE_AMPERSAND=true
 fi
 
+SERVE_PIDS=()
+
 apply_serve() {
   local path="$1"
   local target="$2"
@@ -130,37 +163,32 @@ apply_serve() {
   while [[ "${attempt}" -le 5 ]]; do
     local output
     if [[ "${SERVE_USE_AMPERSAND}" == "true" ]]; then
-      # Run in background with & when --bg is not available
-      # Capture output to check for errors
-      output=$(tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" "${target}" 2>&1 &)
+      # Run with nohup and detach when --bg is not available
+      # Redirect all output to avoid blocking
+      nohup tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" "${target}" >/dev/null 2>&1 &
       local serve_pid=$!
-      # Give it a moment to check status
-      sleep 1
+      # Detach the process so it survives script termination
+      disown "${serve_pid}" 2>/dev/null || true
+      # Store PID for potential cleanup
+      SERVE_PIDS+=("${serve_pid}")
+
+      # Give it time to start and register
+      sleep 2
 
       # Check if tailscale serve command succeeded
       if tailscale serve status 2>&1 | grep -q "${path}"; then
-        # Config was successfully set
+        echo "Successfully configured serve path: ${path}"
         return 0
       fi
 
-      # If not successful, check if it was an etag mismatch
-      if echo "${output}" | grep -qi "etag mismatch"; then
-        echo "Serve config busy, retrying (${attempt}/5)..."
-        # Kill the background process if still running
-        kill "${serve_pid}" 2>/dev/null || true
-        sleep 1
-        attempt=$((attempt + 1))
-        continue
-      fi
-
-      # Config might still be setting up, wait a bit more
+      # Check for etag mismatch by trying to read any error output
+      # Since we can't easily capture output with nohup, try again on failure
+      echo "Serve config may be busy, retrying (${attempt}/5)..."
+      # Kill the process we just started
+      kill "${serve_pid}" 2>/dev/null || true
       sleep 1
-      if tailscale serve status 2>&1 | grep -q "${path}"; then
-        return 0
-      fi
-
-      echo "${output}" >&2
-      return 1
+      attempt=$((attempt + 1))
+      continue
     else
       output=$(tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" ${SERVE_BG_FLAG} "${target}" 2>&1) && return 0
       if echo "${output}" | grep -qi "etag mismatch"; then
@@ -178,14 +206,34 @@ apply_serve() {
 }
 
 echo "Mapping frontend to / on https port ${EXTERNAL_PORT} -> ${FRONTEND_PORT}"
-apply_serve "/" "http://127.0.0.1:${FRONTEND_PORT}"
+if ! apply_serve "/" "http://127.0.0.1:${FRONTEND_PORT}"; then
+  echo "ERROR: Failed to configure frontend path. Check tailscale logs." >&2
+  exit 1
+fi
 
 echo "Mapping backend to /api on https port ${EXTERNAL_PORT} -> ${BACKEND_PORT}"
-apply_serve "/api" "http://127.0.0.1:${BACKEND_PORT}"
+if ! apply_serve "/api" "http://127.0.0.1:${BACKEND_PORT}"; then
+  echo "ERROR: Failed to configure backend path. Check tailscale logs." >&2
+  exit 1
+fi
 
-sleep 1
-echo "Current tailscale serve status:"
+echo ""
+echo "========================================="
+echo "Tailscale Serve Configuration:"
+echo "========================================="
 tailscale serve status
+echo "========================================="
+echo ""
+
+if tailscale serve status 2>&1 | grep -q "no serve config"; then
+  echo "WARNING: No serve config detected. The configuration may not have persisted." >&2
+  echo "This can happen if tailscale serve requires the --bg flag or sudo privileges." >&2
+  if [[ "${SERVE_USE_AMPERSAND}" == "true" ]]; then
+    echo "Note: Running without --bg flag. Tailscale serve processes:" >&2
+    ps aux | grep "[t]ailscale serve" || echo "No tailscale serve processes found" >&2
+  fi
+fi
 
 echo "Services are running. Press Ctrl+C to stop."
+echo "Frontend and Backend will be stopped, but Tailscale serve will persist."
 wait
