@@ -113,13 +113,15 @@ echo "Starting frontend on ${FRONTEND_PORT}..."
 npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" &
 FRONTEND_PID=$!
 
-trap 'kill ${BACKEND_PID} ${FRONTEND_PID} 2>/dev/null || true' EXIT
+trap 'kill ${BACKEND_PID} ${FRONTEND_PID} ${SERVE_FRONT_PID:-} ${SERVE_BACK_PID:-} 2>/dev/null || true' EXIT
 
 echo "Mapping frontend to / on https port ${EXTERNAL_PORT} -> ${FRONTEND_PORT}"
-tailscale serve --https="${EXTERNAL_PORT}" --set-path=/ "http://127.0.0.1:${FRONTEND_PORT}"
+tailscale serve --https="${EXTERNAL_PORT}" --set-path=/ "http://127.0.0.1:${FRONTEND_PORT}" &
+SERVE_FRONT_PID=$!
 
 echo "Mapping backend to /api on https port ${EXTERNAL_PORT} -> ${BACKEND_PORT}"
-tailscale serve --https="${EXTERNAL_PORT}" --set-path=/api "http://127.0.0.1:${BACKEND_PORT}"
+tailscale serve --https="${EXTERNAL_PORT}" --set-path=/api "http://127.0.0.1:${BACKEND_PORT}" &
+SERVE_BACK_PID=$!
 
 echo "Current tailscale serve status:"
 tailscale serve status
