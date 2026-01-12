@@ -67,14 +67,9 @@ echo "========================================="
 echo "Step 3: Authenticating with backend"
 echo "========================================="
 if ! curl -sf "${API_BASE}/health" >/dev/null; then
-  echo "Warn: ${API_BASE}/health unreachable. Trying localhost..." >&2
-  if curl -sf "http://127.0.0.1:50000/health" >/dev/null; then
-    API_BASE="http://127.0.0.1:50000"
-  else
-    echo "Error: Backend is not running at ${API_BASE}"
-    echo "Please start the backend first with: ./deploy.sh"
-    exit 1
-  fi
+  echo "Error: Backend is not running at ${API_BASE}"
+  echo "Please start the backend first with: ./deploy.sh"
+  exit 1
 fi
 echo "✓ Backend is running"
 echo ""
