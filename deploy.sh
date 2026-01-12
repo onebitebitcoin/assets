@@ -115,14 +115,18 @@ FRONTEND_PID=$!
 
 trap 'kill ${BACKEND_PID} ${FRONTEND_PID} ${SERVE_FRONT_PID:-} ${SERVE_BACK_PID:-} 2>/dev/null || true' EXIT
 
+SERVE_BG_FLAG=""
+if tailscale serve --help 2>/dev/null | grep -q -- "--bg"; then
+  SERVE_BG_FLAG="--bg"
+fi
+
 echo "Mapping frontend to / on https port ${EXTERNAL_PORT} -> ${FRONTEND_PORT}"
-tailscale serve --https="${EXTERNAL_PORT}" --set-path=/ "http://127.0.0.1:${FRONTEND_PORT}" &
-SERVE_FRONT_PID=$!
+tailscale serve --https="${EXTERNAL_PORT}" --set-path=/ ${SERVE_BG_FLAG} "http://127.0.0.1:${FRONTEND_PORT}"
 
 echo "Mapping backend to /api on https port ${EXTERNAL_PORT} -> ${BACKEND_PORT}"
-tailscale serve --https="${EXTERNAL_PORT}" --set-path=/api "http://127.0.0.1:${BACKEND_PORT}" &
-SERVE_BACK_PID=$!
+tailscale serve --https="${EXTERNAL_PORT}" --set-path=/api ${SERVE_BG_FLAG} "http://127.0.0.1:${BACKEND_PORT}"
 
+sleep 1
 echo "Current tailscale serve status:"
 tailscale serve status
 
