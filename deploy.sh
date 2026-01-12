@@ -115,27 +115,13 @@ FRONTEND_PID=$!
 
 trap 'kill ${BACKEND_PID} ${FRONTEND_PID} ${SERVE_FRONT_PID:-} ${SERVE_BACK_PID:-} 2>/dev/null || true' EXIT
 
-SERVE_BG_FLAG=""
-RUN_SERVE_BG=false
-if tailscale serve --help 2>/dev/null | grep -q -- "--bg"; then
-  SERVE_BG_FLAG="--bg"
-else
-  RUN_SERVE_BG=true
-fi
-
 echo "Mapping frontend to / on https port ${EXTERNAL_PORT} -> ${FRONTEND_PORT}"
-if [[ "${RUN_SERVE_BG}" == "true" ]]; then
-  nohup tailscale serve --https="${EXTERNAL_PORT}" --set-path=/ "http://127.0.0.1:${FRONTEND_PORT}" >/tmp/ts-serve-frontend.log 2>&1 &
-else
-  tailscale serve --https="${EXTERNAL_PORT}" --set-path=/ ${SERVE_BG_FLAG} "http://127.0.0.1:${FRONTEND_PORT}"
-fi
+nohup tailscale serve --https="${EXTERNAL_PORT}" --set-path=/ "http://127.0.0.1:${FRONTEND_PORT}" >/tmp/ts-serve-frontend.log 2>&1 &
+SERVE_FRONT_PID=$!
 
 echo "Mapping backend to /api on https port ${EXTERNAL_PORT} -> ${BACKEND_PORT}"
-if [[ "${RUN_SERVE_BG}" == "true" ]]; then
-  nohup tailscale serve --https="${EXTERNAL_PORT}" --set-path=/api "http://127.0.0.1:${BACKEND_PORT}" >/tmp/ts-serve-backend.log 2>&1 &
-else
-  tailscale serve --https="${EXTERNAL_PORT}" --set-path=/api ${SERVE_BG_FLAG} "http://127.0.0.1:${BACKEND_PORT}"
-fi
+nohup tailscale serve --https="${EXTERNAL_PORT}" --set-path=/api "http://127.0.0.1:${BACKEND_PORT}" >/tmp/ts-serve-backend.log 2>&1 &
+SERVE_BACK_PID=$!
 
 sleep 1
 echo "Current tailscale serve status:"
