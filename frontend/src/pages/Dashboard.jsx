@@ -132,11 +132,7 @@ const Dashboard = () => {
   };
   const formatQuantity = (value) => {
     if (value === null || value === undefined) return "-";
-    const rounded = Math.round(value * 100) / 100;
-    return new Intl.NumberFormat("ko-KR", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2
-    }).format(rounded);
+    return String(value);
   };
   const chartLabels = chartSeries.map((item) => formatAxisDate(item.period_start));
   const chartData = {
