@@ -37,6 +37,7 @@ const EditAssets = () => {
   const [typeEdits, setTypeEdits] = useState({});
   const [addOpen, setAddOpen] = useState(false);
   const [sortMode, setSortMode] = useState("value");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const parseUpdatedAt = (value) => {
     if (!value) {
@@ -145,6 +146,11 @@ const EditAssets = () => {
       return prev;
     });
   }, [assetForm.asset_type, assetForm.custom_type]);
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredAssets = normalizedQuery
+    ? assets.filter((asset) => (asset.name || "").toLowerCase().includes(normalizedQuery))
+    : assets;
 
   const parseQuantityInput = (value) => {
     const parsed = Number(value);
@@ -313,6 +319,13 @@ const EditAssets = () => {
           <div className="panel-header">
             <h3>보유 자산</h3>
             <div className="asset-panel-actions">
+              <input
+                type="text"
+                placeholder="이름으로 검색"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="asset-search-input"
+              />
               <button className="ghost small" onClick={onRefresh} disabled={refreshing}>
                 {refreshing ? "업데이트 중" : "가격 업데이트"}
               </button>
@@ -443,9 +456,9 @@ const EditAssets = () => {
           <div className="asset-section-divider" />
           {loading ? (
             <p className="muted">불러오는 중...</p>
-          ) : assets.length ? (
+          ) : filteredAssets.length ? (
             <ul className="asset-list">
-              {assets.map((asset) => {
+              {filteredAssets.map((asset) => {
                 const isCustom = isCustomType(asset.asset_type);
                 const hasChanges =
                   nameEdits[asset.id] !== asset.name ||
@@ -650,6 +663,8 @@ const EditAssets = () => {
                 );
               })}
             </ul>
+          ) : assets.length ? (
+            <p className="muted">검색 결과가 없습니다.</p>
           ) : (
             <p className="muted">아직 등록된 자산이 없습니다.</p>
           )}
