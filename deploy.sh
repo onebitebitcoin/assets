@@ -63,6 +63,28 @@ require_cmd npm
 
 cd "${ROOT_DIR}"
 
+echo "Checking tailscaled daemon..."
+if ! systemctl is-active --quiet tailscaled 2>/dev/null; then
+  echo "tailscaled service is not running. Attempting to start..."
+  if command -v systemctl >/dev/null 2>&1; then
+    sudo systemctl start tailscaled
+    sleep 2
+    if systemctl is-active --quiet tailscaled; then
+      echo "✓ tailscaled service started successfully"
+    else
+      echo "ERROR: Failed to start tailscaled service" >&2
+      echo "Please run: sudo systemctl start tailscaled" >&2
+      exit 1
+    fi
+  else
+    echo "ERROR: systemctl not found. Cannot start tailscaled." >&2
+    echo "Please start tailscaled manually." >&2
+    exit 1
+  fi
+else
+  echo "✓ tailscaled service is running"
+fi
+
 if ! tailscale status >/dev/null 2>&1; then
   echo "Tailscale login required. Starting QR login..."
   tailscale login --qr
