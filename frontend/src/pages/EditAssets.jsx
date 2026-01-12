@@ -241,111 +241,111 @@ const EditAssets = () => {
       <section className="grid">
         <div className="panel full">
           <div className="panel-header">
-            <h3>새 자산 추가</h3>
-            <button
-              className="ghost small"
-              type="button"
-              aria-expanded={addOpen}
-              onClick={() => setAddOpen((prev) => !prev)}
-            >
-              {addOpen ? "닫기" : "＋"}
-            </button>
+            <h3>보유 자산</h3>
+            <div className="asset-panel-actions">
+              <button className="ghost small" onClick={onRefresh} disabled={refreshing}>
+                {refreshing ? "업데이트 중" : "가격 업데이트"}
+              </button>
+              <button
+                className="ghost small"
+                type="button"
+                aria-expanded={addOpen}
+                onClick={() => setAddOpen((prev) => !prev)}
+              >
+                {addOpen ? "추가 닫기" : "추가"}
+              </button>
+            </div>
           </div>
-          <div className={`asset-add-body${addOpen ? " open" : ""}`}>
-            <form className="asset-form" onSubmit={onAddAsset}>
-              <label>
-                자산 이름
-                <input
-                  name="name"
-                  value={assetForm.name}
-                  onChange={(event) =>
-                    setAssetForm((prev) => ({ ...prev, name: event.target.value }))
-                  }
-                  placeholder="Apple, Bitcoin"
-                  required
-                />
-              </label>
-              <label>
-                유형
-                <select
-                  name="asset_type"
-                  value={assetForm.asset_type}
-                  onChange={(event) =>
-                    setAssetForm((prev) => ({ ...prev, asset_type: event.target.value }))
-                  }
-                >
-                  <option value="stock">미국 주식</option>
-                  <option value="kr_stock">국내 주식</option>
-                  <option value="crypto">비트코인</option>
-                  <option value="cash">현금</option>
-                  <option value="custom">직접 입력</option>
-                </select>
-              </label>
-              {assetForm.asset_type === "custom" ? (
+          <div className="asset-add-panel">
+            <div className={`asset-add-body${addOpen ? " open" : ""}`}>
+              <form className="asset-form" onSubmit={onAddAsset}>
                 <label>
-                  직접 입력 유형
+                  자산 이름
                   <input
-                    name="custom_type"
-                    value={assetForm.custom_type}
+                    name="name"
+                    value={assetForm.name}
                     onChange={(event) =>
-                      setAssetForm((prev) => ({ ...prev, custom_type: event.target.value }))
+                      setAssetForm((prev) => ({ ...prev, name: event.target.value }))
                     }
-                    placeholder="예금, IRP 계좌"
+                    placeholder="Apple, Bitcoin"
                     required
                   />
                 </label>
-              ) : null}
-              <label>
-                심볼
-                <input
-                  name="symbol"
-                  value={assetForm.symbol}
-                  onChange={(event) =>
-                    setAssetForm((prev) => ({ ...prev, symbol: event.target.value }))
-                  }
-                placeholder={
-                  assetForm.asset_type === "crypto"
-                    ? "BTC"
-                    : assetForm.asset_type === "kr_stock"
-                      ? "005930"
-                      : assetForm.asset_type === "cash"
-                        ? "CASH"
-                        : "AAPL"
-                }
-                disabled={!["stock", "kr_stock"].includes(assetForm.asset_type)}
-                required
-              />
-            </label>
-            <label>
-              {["custom", "cash"].includes(assetForm.asset_type) ? "금액(만원)" : "수량"}
-              <input
-                name="quantity"
-                type="number"
-                  min="1"
-                  step="1"
-                  inputMode="numeric"
-                  value={assetForm.quantity}
-                  onChange={(event) =>
-                    setAssetForm((prev) => ({ ...prev, quantity: event.target.value }))
-                  }
-                  required
-                />
-              </label>
-              <button className="primary" type="submit">
-                자산 추가
-              </button>
-            </form>
-            <p className="muted">미국/국내 주식, 비트코인, 현금, 직접 입력 자산만 지원합니다.</p>
+                <label>
+                  유형
+                  <select
+                    name="asset_type"
+                    value={assetForm.asset_type}
+                    onChange={(event) =>
+                      setAssetForm((prev) => ({ ...prev, asset_type: event.target.value }))
+                    }
+                  >
+                    <option value="stock">미국 주식</option>
+                    <option value="kr_stock">국내 주식</option>
+                    <option value="crypto">비트코인</option>
+                    <option value="cash">현금</option>
+                    <option value="custom">직접 입력</option>
+                  </select>
+                </label>
+                {assetForm.asset_type === "custom" ? (
+                  <label>
+                    직접 입력 유형
+                    <input
+                      name="custom_type"
+                      value={assetForm.custom_type}
+                      onChange={(event) =>
+                        setAssetForm((prev) => ({ ...prev, custom_type: event.target.value }))
+                      }
+                      placeholder="예금, IRP 계좌"
+                      required
+                    />
+                  </label>
+                ) : null}
+                <label>
+                  심볼
+                  <input
+                    name="symbol"
+                    value={assetForm.symbol}
+                    onChange={(event) =>
+                      setAssetForm((prev) => ({ ...prev, symbol: event.target.value }))
+                    }
+                    placeholder={
+                      assetForm.asset_type === "crypto"
+                        ? "BTC"
+                        : assetForm.asset_type === "kr_stock"
+                          ? "005930"
+                          : assetForm.asset_type === "cash"
+                            ? "CASH"
+                            : "AAPL"
+                    }
+                    disabled={!["stock", "kr_stock"].includes(assetForm.asset_type)}
+                    required
+                  />
+                </label>
+                <label>
+                  {["custom", "cash"].includes(assetForm.asset_type) ? "금액(만원)" : "수량"}
+                  <input
+                    name="quantity"
+                    type="number"
+                    min="1"
+                    step="1"
+                    inputMode="numeric"
+                    value={assetForm.quantity}
+                    onChange={(event) =>
+                      setAssetForm((prev) => ({ ...prev, quantity: event.target.value }))
+                    }
+                    required
+                  />
+                </label>
+                <button className="primary" type="submit">
+                  자산 추가
+                </button>
+              </form>
+              <p className="muted">미국/국내 주식, 비트코인, 현금, 직접 입력 자산만 지원합니다.</p>
+            </div>
           </div>
-        </div>
 
-        <div className="panel full">
-          <div className="panel-header">
-            <h3>보유 자산</h3>
-            <button className="ghost small" onClick={onRefresh} disabled={refreshing}>
-              {refreshing ? "업데이트 중" : "가격 업데이트"}
-            </button>
-          </div>
+          <div className="asset-section-divider" />
           {loading ? (
             <p className="muted">불러오는 중...</p>
           ) : assets.length ? (
@@ -379,15 +379,6 @@ const EditAssets = () => {
                             </p>
                           )}
                         </div>
-                        <button
-                          className="ghost small"
-                          onClick={() => onRefreshAsset(asset.id)}
-                          disabled={refreshingAssets[asset.id]}
-                          type="button"
-                          title="가격 업데이트"
-                        >
-                          {refreshingAssets[asset.id] ? "..." : "↻"}
-                        </button>
                       </div>
                     </div>
 
@@ -487,6 +478,15 @@ const EditAssets = () => {
                           <p className="asset-meta">업데이트: {formatUpdatedAt(asset.last_updated)}</p>
                         </div>
                         <div className="asset-edit-actions">
+                          <button
+                            className="ghost small"
+                            onClick={() => onRefreshAsset(asset.id)}
+                            disabled={refreshingAssets[asset.id]}
+                            type="button"
+                            title="가격 업데이트"
+                          >
+                            {refreshingAssets[asset.id] ? "새로고침 중..." : "새로고침"}
+                          </button>
                           <button
                             className="primary small"
                             type="button"

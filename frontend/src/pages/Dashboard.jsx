@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Chart as ChartJS,
-  ArcElement,
+  BarElement,
   CategoryScale,
   Legend,
   LinearScale,
@@ -9,7 +9,7 @@ import {
   PointElement,
   Tooltip
 } from "chart.js";
-import { Line, Pie } from "react-chartjs-2";
+import { Bar, Line } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
 import {
   clearToken,
@@ -19,7 +19,15 @@ import {
 } from "../api.js";
 import { formatDelta, formatKRW, formatUSD } from "../utils/format.js";
 
-ChartJS.register(ArcElement, CategoryScale, Legend, LinearScale, LineElement, PointElement, Tooltip);
+ChartJS.register(
+  BarElement,
+  CategoryScale,
+  Legend,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip
+);
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -33,6 +41,13 @@ const Dashboard = () => {
   const [periodLoading, setPeriodLoading] = useState(false);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [cardHistoryOpen, setCardHistoryOpen] = useState({});
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.matchMedia("(max-width: 640px)").matches;
+  });
 
   const loadSummary = async () => {
     try {
@@ -45,6 +60,21 @@ const Dashboard = () => {
 
   useEffect(() => {
     loadSummary();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+    const media = window.matchMedia("(max-width: 640px)");
+    const updateMatch = () => setIsMobile(media.matches);
+    updateMatch();
+    if (media.addEventListener) {
+      media.addEventListener("change", updateMatch);
+      return () => media.removeEventListener("change", updateMatch);
+    }
+    media.addListener(updateMatch);
+    return () => media.removeListener(updateMatch);
   }, []);
 
 
@@ -74,6 +104,10 @@ const Dashboard = () => {
 
   useEffect(() => {
     loadTotals(0, false, period);
+  }, [period]);
+
+  useEffect(() => {
+    setCardHistoryOpen({});
   }, [period]);
 
   const onSnapshot = async () => {
@@ -162,44 +196,57 @@ const Dashboard = () => {
       }
     ]
   };
-  const allocationLabels = ["주식", "현금", "비트코인", "기타"];
-  const allocationColors = ["#60a5fa", "#34d399", "#fbbf24", "#94a3b8"];
-  const cashKeywords = ["현금", "예금", "적금", "통장", "cma", "파킹", "cash"];
-  const isCashLike = (asset) => {
-    const raw = `${asset.asset_type ?? ""} ${asset.name ?? ""} ${asset.symbol ?? ""}`;
-    const lowered = raw.toLowerCase();
-    return cashKeywords.some((keyword) => lowered.includes(keyword));
+  const allocationCategories = ["미국주식", "한국주식", "비트코인", "기타(직접입력)"];
+  const allocationColorMap = {
+    미국주식: "#60a5fa",
+    한국주식: "#f97316",
+    비트코인: "#fbbf24",
+    "기타(직접입력)": "#94a3b8"
   };
-  const allocationTotals = allocationLabels.reduce(
+  const allocationTotals = allocationCategories.reduce(
     (acc, label) => ({ ...acc, [label]: 0 }),
     {}
   );
   summary.assets.forEach((asset) => {
     const value = (asset.last_price_krw || 0) * (asset.quantity || 0);
+    if (value <= 0) {
+      return;
+    }
     const type = asset.asset_type?.toLowerCase();
-    if (type === "stock" || type === "kr_stock") {
-      allocationTotals["주식"] += value;
+    if (type === "stock") {
+      allocationTotals["미국주식"] += value;
+      return;
+    }
+    if (type === "kr_stock") {
+      allocationTotals["한국주식"] += value;
       return;
     }
     if (type === "crypto" && asset.symbol?.toUpperCase() === "BTC") {
       allocationTotals["비트코인"] += value;
       return;
     }
-    if (isCashLike(asset)) {
-      allocationTotals["현금"] += value;
-      return;
-    }
-    allocationTotals["기타"] += value;
+    allocationTotals["기타(직접입력)"] += value;
   });
-  const allocationValues = allocationLabels.map((label) => allocationTotals[label]);
-  const allocationHasData = allocationValues.some((value) => value > 0);
+  const totalPortfolioValue = Object.values(allocationTotals).reduce((sum, value) => sum + value, 0);
+  const allocationEntries = allocationCategories.map((label) => {
+    const share =
+      totalPortfolioValue > 0 ? Math.round((allocationTotals[label] / totalPortfolioValue) * 1000) / 10 : 0;
+    return { label, share };
+  });
+  allocationEntries.sort((a, b) => b.share - a.share);
+  const allocationHasData = totalPortfolioValue > 0;
+  const allocationLabels = allocationEntries.map((entry) => `${entry.label} (${entry.share}%)`);
+  const allocationShares = allocationEntries.map((entry) => entry.share);
+  const allocationColors = allocationEntries.map((entry) => allocationColorMap[entry.label]);
   const allocationData = {
     labels: allocationLabels,
     datasets: [
       {
-        data: allocationValues,
+        label: "비중(%)",
+        data: allocationShares,
         backgroundColor: allocationColors,
-        borderWidth: 0
+        borderRadius: 8,
+        borderSkipped: false
       }
     ]
   };
@@ -207,17 +254,31 @@ const Dashboard = () => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        position: "bottom",
-        labels: {
-          color: "#cbd5f5",
-          usePointStyle: true,
-          padding: 16
-        }
-      },
+      legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (context) => `${context.label}: ${formatKRW(context.parsed)}`
+          label: (context) => `${context.parsed.y}%`
+        }
+      }
+    },
+    indexAxis: "y",
+    scales: {
+      x: {
+        ticks: {
+          color: "#94a3b8",
+          callback: (value) => `${value}%`
+        },
+        grid: {
+          color: "rgba(148, 163, 184, 0.1)"
+        },
+        suggestedMax: 100
+      },
+      y: {
+        ticks: {
+          color: "#cbd5f5"
+        },
+        grid: {
+          display: false
         }
       }
     }
@@ -254,6 +315,8 @@ const Dashboard = () => {
       }
     }
   };
+  const getCardPeriods = (key) =>
+    isMobile && !cardHistoryOpen[key] ? periodTotals.slice(0, 1) : periodTotals.slice(0, 10);
 
   return (
     <div className="dashboard">
@@ -323,10 +386,6 @@ const Dashboard = () => {
               )}
             </div>
             <div className="chart-footer">
-              <p className="muted">
-                최근 {periodTotals.length}
-                {periodUnit[period]} 기준
-              </p>
               {periodHasMore ? (
                 <button
                   className="ghost small"
@@ -348,7 +407,7 @@ const Dashboard = () => {
             </div>
             <div className="chart-canvas pie-canvas">
               {allocationHasData ? (
-                <Pie data={allocationData} options={allocationOptions} />
+                <Bar data={allocationData} options={allocationOptions} />
               ) : (
                 <p className="muted">데이터가 없습니다.</p>
               )}
@@ -359,70 +418,155 @@ const Dashboard = () => {
 
       <section className="panel">
         <div className="panel-header">
-          <h3>자산 변화 테이블</h3>
+          <h3>자산 변화</h3>
           <input
             type="text"
             placeholder="자산 검색 (이름, 심볼)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ maxWidth: "240px" }}
+            className="asset-search-input"
           />
         </div>
         {periodTotals.length ? (
-          <div className="table-wrapper">
-            <table className="asset-table">
-              <thead>
-                <tr>
-                  <th className="asset-name-col">종목</th>
-                  <th>수량</th>
-                  <th>현재가(USD)</th>
-                  {periodTotals.map((row, index) => (
-                    <th key={`${row.period_start}-${index}`}>{formatAxisDate(row.period_start)}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="asset-name-col">총 자산</td>
-                  <td>-</td>
-                  <td>-</td>
-                  {periodTotals.map((row, index) => {
-                    const prev = periodTotals[index + 1];
-                    const totalClass = getDeltaClass(row.total_krw, prev?.total_krw);
-                    return (
-                      <td key={`${row.period_start}-${index}`} className={totalClass}>
-                        {formatKRW(row.total_krw)}
-                      </td>
-                    );
-                  })}
-                </tr>
-                {filteredTableColumns.map((asset) => (
-                  <tr key={asset.id}>
-                    <td className="asset-name-col">
-                      {asset.name} <span className="muted">({asset.symbol})</span>
-                    </td>
-                    <td>{formatQuantity(assetMetaById.get(asset.id)?.quantity)}</td>
-                    <td>
-                      {assetMetaById.get(asset.id)?.last_price_usd
-                        ? formatUSD(assetMetaById.get(asset.id)?.last_price_usd)
-                        : "-"}
-                    </td>
+          <>
+            <div className="table-wrapper">
+              <table className="asset-table">
+                <thead>
+                  <tr>
+                    <th className="asset-name-col">종목</th>
+                    <th>수량</th>
+                    <th>현재가(USD)</th>
+                    {periodTotals.map((row, index) => (
+                      <th key={`${row.period_start}-${index}`}>{formatAxisDate(row.period_start)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="asset-name-col">총 자산</td>
+                    <td>-</td>
+                    <td>-</td>
                     {periodTotals.map((row, index) => {
-                      const current = (row.assets || []).find((item) => item.id === asset.id);
                       const prev = periodTotals[index + 1];
-                      const prevAsset = prev?.assets?.find((item) => item.id === asset.id);
-                      const assetClass = getDeltaClass(current?.total_krw, prevAsset?.total_krw);
+                      const totalClass = getDeltaClass(row.total_krw, prev?.total_krw);
                       return (
-                        <td key={`${asset.id}-${row.period_start}-${index}`} className={assetClass}>
-                          {formatKRW(current?.total_krw || 0)}
+                        <td key={`${row.period_start}-${index}`} className={totalClass}>
+                          {formatKRW(row.total_krw)}
                         </td>
                       );
                     })}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  {filteredTableColumns.map((asset) => (
+                    <tr key={asset.id}>
+                      <td className="asset-name-col">
+                        {asset.name} <span className="muted">({asset.symbol})</span>
+                      </td>
+                      <td>{formatQuantity(assetMetaById.get(asset.id)?.quantity)}</td>
+                      <td>
+                        {assetMetaById.get(asset.id)?.last_price_usd
+                          ? formatUSD(assetMetaById.get(asset.id)?.last_price_usd)
+                          : "-"}
+                      </td>
+                      {periodTotals.map((row, index) => {
+                        const current = (row.assets || []).find((item) => item.id === asset.id);
+                        const prev = periodTotals[index + 1];
+                        const prevAsset = prev?.assets?.find((item) => item.id === asset.id);
+                        const assetClass = getDeltaClass(current?.total_krw, prevAsset?.total_krw);
+                        return (
+                          <td key={`${asset.id}-${row.period_start}-${index}`} className={assetClass}>
+                            {formatKRW(current?.total_krw || 0)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="asset-table-cards">
+              <article className="asset-change-card">
+                <div className="asset-change-header">
+                  <div>
+                    <h4>총 자산</h4>
+                    <p className="asset-change-meta muted">요약</p>
+                  </div>
+                </div>
+                <div className="asset-change-body">
+                  {getCardPeriods("total").map((row, index) => {
+                    const prev = periodTotals[index + 1];
+                    const totalClass = getDeltaClass(row.total_krw, prev?.total_krw);
+                    return (
+                      <div key={`total-${row.period_start}-${index}`} className="asset-change-row">
+                        <span className="asset-change-date">{formatAxisDate(row.period_start)}</span>
+                        <span className={totalClass}>{formatKRW(row.total_krw)}</span>
+                      </div>
+                    );
+                  })}
+                  {periodTotals.length > 1 ? (
+                    <button
+                      type="button"
+                      className="ghost small asset-card-toggle"
+                      onClick={() =>
+                        setCardHistoryOpen((prev) => ({
+                          ...prev,
+                          total: !prev.total
+                        }))
+                      }
+                    >
+                      {cardHistoryOpen.total ? "접기" : "더보기"}
+                    </button>
+                  ) : null}
+                </div>
+              </article>
+              {filteredTableColumns.map((asset) => {
+                const meta = assetMetaById.get(asset.id) || {};
+                const cardKey = `asset-${asset.id}`;
+                return (
+                  <article key={`card-${asset.id}`} className="asset-change-card">
+                    <div className="asset-change-header">
+                      <div>
+                        <h4>
+                          {asset.name} <span className="muted">({asset.symbol})</span>
+                        </h4>
+                        <p className="asset-change-meta">
+                          보유 {formatQuantity(meta.quantity)} ·{" "}
+                          {meta.last_price_usd ? formatUSD(meta.last_price_usd) : "USD -"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="asset-change-body">
+                      {getCardPeriods(cardKey).map((row, index) => {
+                        const current = (row.assets || []).find((item) => item.id === asset.id);
+                        const prev = periodTotals[index + 1];
+                        const prevAsset = prev?.assets?.find((item) => item.id === asset.id);
+                        const assetClass = getDeltaClass(current?.total_krw, prevAsset?.total_krw);
+                        return (
+                          <div key={`${asset.id}-${row.period_start}-${index}`} className="asset-change-row">
+                            <span className="asset-change-date">{formatAxisDate(row.period_start)}</span>
+                            <span className={assetClass}>{formatKRW(current?.total_krw || 0)}</span>
+                          </div>
+                        );
+                      })}
+                      {periodTotals.length > 1 ? (
+                        <button
+                          type="button"
+                          className="ghost small asset-card-toggle"
+                          onClick={() =>
+                            setCardHistoryOpen((prev) => ({
+                              ...prev,
+                              [cardKey]: !prev[cardKey]
+                            }))
+                          }
+                        >
+                          {cardHistoryOpen[cardKey] ? "접기" : "더보기"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </>
         ) : (
           <p className="muted">데이터가 없습니다.</p>
         )}
