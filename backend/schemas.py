@@ -27,6 +27,8 @@ class AssetCreate(BaseModel):
 
 
 class AssetUpdate(BaseModel):
+    name: Optional[str] = None
+    asset_type: Optional[str] = None
     quantity: float = Field(gt=0)
     price_krw: Optional[float] = Field(default=None, gt=0)
 

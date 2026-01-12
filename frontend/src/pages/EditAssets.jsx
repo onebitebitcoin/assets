@@ -22,6 +22,8 @@ const EditAssets = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [quantityEdits, setQuantityEdits] = useState({});
   const [priceEdits, setPriceEdits] = useState({});
+  const [nameEdits, setNameEdits] = useState({});
+  const [typeEdits, setTypeEdits] = useState({});
   const [addOpen, setAddOpen] = useState(false);
 
   const loadAssets = async () => {
@@ -52,19 +54,43 @@ const EditAssets = () => {
   useEffect(() => {
     if (!assets.length) {
       setQuantityEdits({});
+      setNameEdits({});
+      setTypeEdits({});
+      setPriceEdits({});
       return;
     }
     const next = {};
     const nextPrices = {};
+    const nextNames = {};
+    const nextTypes = {};
     assets.forEach((asset) => {
-      next[asset.id] = String(Math.trunc(asset.quantity));
-      if (isCustomType(asset.asset_type)) {
+      // Only set if not already set (for initial load and new assets)
+      if (!(asset.id in quantityEdits)) {
+        next[asset.id] = String(Math.trunc(asset.quantity));
+      }
+      if (!(asset.id in nameEdits)) {
+        nextNames[asset.id] = asset.name || "";
+      }
+      if (!(asset.id in typeEdits)) {
+        nextTypes[asset.id] = asset.asset_type || "stock";
+      }
+      if (isCustomType(asset.asset_type) && !(asset.id in priceEdits)) {
         nextPrices[asset.id] = asset.last_price_krw ? String(asset.last_price_krw) : "";
       }
     });
-    setQuantityEdits(next);
-    setPriceEdits(nextPrices);
-  }, [assets]);
+    if (Object.keys(next).length > 0) {
+      setQuantityEdits((prev) => ({ ...prev, ...next }));
+    }
+    if (Object.keys(nextPrices).length > 0) {
+      setPriceEdits((prev) => ({ ...prev, ...nextPrices }));
+    }
+    if (Object.keys(nextNames).length > 0) {
+      setNameEdits((prev) => ({ ...prev, ...nextNames }));
+    }
+    if (Object.keys(nextTypes).length > 0) {
+      setTypeEdits((prev) => ({ ...prev, ...nextTypes }));
+    }
+  }, [assets, quantityEdits, nameEdits, typeEdits, priceEdits]);
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -321,22 +347,69 @@ const EditAssets = () => {
             <ul className="asset-list">
               {assets.map((asset) => {
                 const isCustom = isCustomType(asset.asset_type);
+                const hasChanges =
+                  nameEdits[asset.id] !== asset.name ||
+                  typeEdits[asset.id] !== asset.asset_type ||
+                  parseQuantityInput(quantityEdits[asset.id]) !== Math.trunc(asset.quantity) ||
+                  (isCustom && parsePriceInput(priceEdits[asset.id]) !== asset.last_price_krw);
                 return (
-                  <li key={asset.id} className="asset-item">
-                    <div>
-                      <div className="asset-title">
-                        <p className="asset-name">{asset.name}</p>
+                  <li key={asset.id} className="asset-edit-card">
+                    <div className="asset-edit-header">
+                      <div>
+                        <h4 className="asset-edit-name">{asset.name}</h4>
+                        <p className="asset-meta">
+                          {asset.symbol} · 보유: {new Intl.NumberFormat("ko-KR", {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 2
+                          }).format(asset.quantity)}
+                        </p>
                       </div>
-                      <p className="asset-meta">
-                        {asset.symbol} ·{" "}
-                        {new Intl.NumberFormat("ko-KR", {
-                          minimumFractionDigits: 0,
-                          maximumFractionDigits: 2
-                        }).format(asset.quantity)}
-                      </p>
-                      <div className="asset-quantity">
+                      <div className="asset-edit-value">
+                        <p className="asset-total-krw">{formatKRW(asset.value_krw)}</p>
+                        {!isCustom && (
+                          <p className="asset-meta">
+                            {formatUSD(asset.last_price_usd ? asset.last_price_usd * asset.quantity : null)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="asset-edit-form">
+                      <div className="asset-edit-grid">
                         <label>
-                          수량
+                          <span className="label-text">이름</span>
+                          <input
+                            type="text"
+                            value={nameEdits[asset.id] ?? ""}
+                            onChange={(event) =>
+                              setNameEdits((prev) => ({
+                                ...prev,
+                                [asset.id]: event.target.value
+                              }))
+                            }
+                            placeholder="자산 이름"
+                          />
+                        </label>
+                        <label>
+                          <span className="label-text">유형</span>
+                          <select
+                            value={typeEdits[asset.id] ?? "stock"}
+                            onChange={(event) =>
+                              setTypeEdits((prev) => ({
+                                ...prev,
+                                [asset.id]: event.target.value
+                              }))
+                            }
+                          >
+                            <option value="stock">미국 주식</option>
+                            <option value="kr_stock">국내 주식</option>
+                            <option value="crypto">비트코인</option>
+                            <option value="cash">현금</option>
+                            <option value="custom">직접 입력</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span className="label-text">수량</span>
                           <input
                             type="number"
                             min="1"
@@ -351,9 +424,9 @@ const EditAssets = () => {
                             }
                           />
                         </label>
-                        {isCustom ? (
+                        {isCustom && (
                           <label>
-                            단가(원)
+                            <span className="label-text">단가(원)</span>
                             <input
                               type="number"
                               min="1"
@@ -368,81 +441,91 @@ const EditAssets = () => {
                               }
                             />
                           </label>
-                        ) : null}
-                        <button
-                          className="primary small"
-                          type="button"
-                          disabled={
-                            !parseQuantityInput(quantityEdits[asset.id]) ||
-                            (isCustom && !parsePriceInput(priceEdits[asset.id])) ||
-                            (parseQuantityInput(quantityEdits[asset.id]) ===
-                              Math.trunc(asset.quantity) &&
-                              (!isCustom ||
-                                parsePriceInput(priceEdits[asset.id]) === asset.last_price_krw))
-                          }
-                          onClick={() => {
-                            const value = parseQuantityInput(quantityEdits[asset.id]);
-                            if (!value) {
-                              setError(
-                                "수량은 1 이상의 정수만 가능합니다."
-                              );
-                              return;
+                        )}
+                      </div>
+
+                      <div className="asset-edit-footer">
+                        <div className="asset-edit-info">
+                          {!isCustom ? (
+                            <p className="asset-meta">
+                              현재가: {formatUSD(asset.last_price_usd)} · {formatKRW(asset.last_price_krw)}
+                            </p>
+                          ) : (
+                            <p className="asset-meta">직접 입력 자산</p>
+                          )}
+                          <p className="asset-meta">업데이트: {formatUpdatedAt(asset.last_updated)}</p>
+                        </div>
+                        <div className="asset-edit-actions">
+                          <button
+                            className="primary small"
+                            type="button"
+                            disabled={
+                              !nameEdits[asset.id]?.trim() ||
+                              !parseQuantityInput(quantityEdits[asset.id]) ||
+                              (isCustom && !parsePriceInput(priceEdits[asset.id])) ||
+                              !hasChanges
                             }
-                            let priceValue = null;
-                            if (isCustom) {
-                              priceValue = parsePriceInput(priceEdits[asset.id]);
-                              if (!priceValue) {
-                                setError("단가는 1 이상의 숫자만 가능합니다.");
+                            onClick={() => {
+                              const name = nameEdits[asset.id]?.trim();
+                              if (!name) {
+                                setError("이름을 입력해주세요.");
                                 return;
                               }
-                            }
-                            updateAsset(asset.id, {
-                              quantity: value,
-                              ...(priceValue ? { price_krw: priceValue } : {})
-                            })
-                              .then((updated) => {
-                                setAssets((prev) =>
-                                  prev.map((item) => (item.id === asset.id ? updated : item))
-                                );
-                                setQuantityEdits((prev) => ({
-                                  ...prev,
-                                  [asset.id]: String(value)
-                                }));
-                                if (priceValue) {
-                                  setPriceEdits((prev) => ({
-                                    ...prev,
-                                    [asset.id]: String(priceValue)
-                                  }));
+                              const value = parseQuantityInput(quantityEdits[asset.id]);
+                              if (!value) {
+                                setError("수량은 1 이상의 정수만 가능합니다.");
+                                return;
+                              }
+                              let priceValue = null;
+                              if (isCustom) {
+                                priceValue = parsePriceInput(priceEdits[asset.id]);
+                                if (!priceValue) {
+                                  setError("단가는 1 이상의 숫자만 가능합니다.");
+                                  return;
                                 }
+                              }
+                              updateAsset(asset.id, {
+                                name,
+                                asset_type: typeEdits[asset.id],
+                                quantity: value,
+                                ...(priceValue ? { price_krw: priceValue } : {})
                               })
-                              .catch((err) => {
-                                setError(err.message);
-                              });
-                          }}
-                        >
-                          저장
-                        </button>
+                                .then((updated) => {
+                                  setAssets((prev) =>
+                                    prev.map((item) => (item.id === asset.id ? updated : item))
+                                  );
+                                  setNameEdits((prev) => ({
+                                    ...prev,
+                                    [asset.id]: updated.name || ""
+                                  }));
+                                  setTypeEdits((prev) => ({
+                                    ...prev,
+                                    [asset.id]: updated.asset_type || "stock"
+                                  }));
+                                  setQuantityEdits((prev) => ({
+                                    ...prev,
+                                    [asset.id]: String(Math.trunc(updated.quantity))
+                                  }));
+                                  const updatedIsCustom = isCustomType(updated.asset_type);
+                                  if (updatedIsCustom && updated.last_price_krw) {
+                                    setPriceEdits((prev) => ({
+                                      ...prev,
+                                      [asset.id]: String(updated.last_price_krw)
+                                    }));
+                                  }
+                                })
+                                .catch((err) => {
+                                  setError(err.message);
+                                });
+                            }}
+                          >
+                            저장
+                          </button>
+                          <button className="ghost small" onClick={() => onDelete(asset.id)}>
+                            삭제
+                          </button>
+                        </div>
                       </div>
-                      {isCustom ? (
-                        <p className="asset-meta">단가를 수정할 수 있습니다.</p>
-                      ) : (
-                        <p className="asset-meta">
-                          1주/1코인: {formatUSD(asset.last_price_usd)} ·{" "}
-                          {formatKRW(asset.last_price_krw)}
-                        </p>
-                      )}
-                      <p className="asset-meta">업데이트: {formatUpdatedAt(asset.last_updated)}</p>
-                    </div>
-                    <div className="asset-value">
-                      <p className="asset-total-usd">
-                        {formatUSD(
-                          asset.last_price_usd ? asset.last_price_usd * asset.quantity : null
-                        )}
-                      </p>
-                      <p className="asset-total-krw">{formatKRW(asset.value_krw)}</p>
-                      <button className="text" onClick={() => onDelete(asset.id)}>
-                        삭제
-                      </button>
                     </div>
                   </li>
                 );

@@ -377,6 +377,90 @@ button:disabled {
   border: 1px solid rgba(148, 163, 184, 0.15);
 }
 
+.asset-edit-card {
+  background: #111827;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 16px;
+  padding: 1.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.asset-edit-card:hover {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.asset-edit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.asset-edit-name {
+  margin: 0 0 0.4rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.asset-edit-value {
+  text-align: right;
+}
+
+.asset-edit-value .asset-total-krw {
+  margin: 0 0 0.2rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.asset-edit-form {
+  display: grid;
+  gap: 1.2rem;
+}
+
+.asset-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.asset-edit-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.label-text {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.asset-edit-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.asset-edit-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.asset-edit-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
 .asset-title {
   display: flex;
   align-items: center;
@@ -401,6 +485,13 @@ button:disabled {
 
 .asset-quantity input {
   width: 140px;
+}
+
+.asset-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+  flex-wrap: wrap;
 }
 
 .small {
@@ -571,5 +662,35 @@ button:disabled {
 
   .asset-quantity input {
     width: 100%;
+  }
+
+  .asset-edit-card {
+    padding: 1rem;
+  }
+
+  .asset-edit-header {
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .asset-edit-value {
+    text-align: left;
+  }
+
+  .asset-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-edit-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .asset-edit-actions {
+    width: 100%;
+  }
+
+  .asset-edit-actions button {
+    flex: 1;
   }
 }
