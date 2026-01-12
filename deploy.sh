@@ -42,6 +42,21 @@ port_in_use() {
   exit 1
 }
 
+kill_port() {
+  local port="$1"
+  local pids=""
+  if command -v lsof >/dev/null 2>&1; then
+    pids=$(lsof -ti tcp:"${port}" 2>/dev/null || true)
+  elif command -v ss >/dev/null 2>&1; then
+    pids=$(ss -ltnp 2>/dev/null | awk -v port=":${port}" '$0 ~ port {print $NF}' | sed -E 's/.*pid=([0-9]+).*/\\1/' | sort -u)
+  fi
+  if [[ -n "${pids}" ]]; then
+    echo "Stopping process on port ${port}: ${pids}"
+    kill ${pids} 2>/dev/null || true
+    sleep 1
+  fi
+}
+
 require_cmd tailscale
 require_cmd python3
 require_cmd npm
@@ -54,11 +69,13 @@ if ! tailscale status >/dev/null 2>&1; then
 fi
 
 if port_in_use "${FRONTEND_PORT}"; then
-  echo "Port ${FRONTEND_PORT} is already in use. Stop the service or choose a different port." >&2
-  exit 1
+  kill_port "${FRONTEND_PORT}"
 fi
 if port_in_use "${BACKEND_PORT}"; then
-  echo "Port ${BACKEND_PORT} is already in use. Stop the service or choose a different port." >&2
+  kill_port "${BACKEND_PORT}"
+fi
+if port_in_use "${FRONTEND_PORT}" || port_in_use "${BACKEND_PORT}"; then
+  echo "Ports are still in use. Stop the services or choose different ports." >&2
   exit 1
 fi
 
