@@ -7,7 +7,8 @@ export default defineConfig({
     port: 50001,
     proxy: {
       "/api": "http://127.0.0.1:50000"
-    }
+    },
+    allowedHosts: ["ubuntu.golden-ghost.ts.net"]
   },
   test: {
     environment: "jsdom",
