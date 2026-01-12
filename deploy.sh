@@ -48,6 +48,11 @@ require_cmd npm
 
 cd "${ROOT_DIR}"
 
+if ! tailscale status >/dev/null 2>&1; then
+  echo "Tailscale login required. Starting QR login..."
+  tailscale login --qr
+fi
+
 if port_in_use "${FRONTEND_PORT}"; then
   echo "Port ${FRONTEND_PORT} is already in use. Stop the service or choose a different port." >&2
   exit 1
