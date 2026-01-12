@@ -66,6 +66,7 @@ app.add_middleware(
         "http://localhost:50001",
         "http://127.0.0.1:50001",
         "https://ubuntu.golden-ghost.ts.net",
+        "https://ubuntu.golden-ghost.ts.net:8443",
     ],
     allow_credentials=True,
     allow_methods=["*"],
