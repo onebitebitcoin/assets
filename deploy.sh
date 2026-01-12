@@ -116,8 +116,11 @@ FRONTEND_PID=$!
 trap 'kill ${BACKEND_PID} ${FRONTEND_PID} 2>/dev/null || true' EXIT
 
 SERVE_BG_FLAG=""
+SERVE_USE_AMPERSAND=false
 if tailscale serve --help 2>/dev/null | grep -q -- "--bg"; then
   SERVE_BG_FLAG="--bg"
+else
+  SERVE_USE_AMPERSAND=true
 fi
 
 apply_serve() {
@@ -126,15 +129,49 @@ apply_serve() {
   local attempt=1
   while [[ "${attempt}" -le 5 ]]; do
     local output
-    output=$(tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" ${SERVE_BG_FLAG} "${target}" 2>&1) && return 0
-    if echo "${output}" | grep -qi "etag mismatch"; then
-      echo "Serve config busy, retrying (${attempt}/5)..."
+    if [[ "${SERVE_USE_AMPERSAND}" == "true" ]]; then
+      # Run in background with & when --bg is not available
+      # Capture output to check for errors
+      output=$(tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" "${target}" 2>&1 &)
+      local serve_pid=$!
+      # Give it a moment to check status
       sleep 1
-      attempt=$((attempt + 1))
-      continue
+
+      # Check if tailscale serve command succeeded
+      if tailscale serve status 2>&1 | grep -q "${path}"; then
+        # Config was successfully set
+        return 0
+      fi
+
+      # If not successful, check if it was an etag mismatch
+      if echo "${output}" | grep -qi "etag mismatch"; then
+        echo "Serve config busy, retrying (${attempt}/5)..."
+        # Kill the background process if still running
+        kill "${serve_pid}" 2>/dev/null || true
+        sleep 1
+        attempt=$((attempt + 1))
+        continue
+      fi
+
+      # Config might still be setting up, wait a bit more
+      sleep 1
+      if tailscale serve status 2>&1 | grep -q "${path}"; then
+        return 0
+      fi
+
+      echo "${output}" >&2
+      return 1
+    else
+      output=$(tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" ${SERVE_BG_FLAG} "${target}" 2>&1) && return 0
+      if echo "${output}" | grep -qi "etag mismatch"; then
+        echo "Serve config busy, retrying (${attempt}/5)..."
+        sleep 1
+        attempt=$((attempt + 1))
+        continue
+      fi
+      echo "${output}" >&2
+      return 1
     fi
-    echo "${output}" >&2
-    return 1
   done
   echo "Failed to update serve config after retries." >&2
   return 1
