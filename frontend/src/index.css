@@ -316,6 +316,22 @@ button:disabled {
   grid-column: 1 / -1;
 }
 
+.asset-add-body {
+  margin-top: 0;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: max-height 220ms ease, opacity 220ms ease, margin-top 220ms ease;
+}
+
+.asset-add-body.open {
+  margin-top: 1rem;
+  max-height: 1000px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .panel-header {
   display: flex;
   align-items: center;
