@@ -62,7 +62,11 @@ scheduler = BackgroundScheduler(timezone=ZoneInfo("Asia/Seoul"))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:50001", "http://127.0.0.1:50001"],
+    allow_origins=[
+        "http://localhost:50001",
+        "http://127.0.0.1:50001",
+        "https://ubuntu.golden-ghost.ts.net",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -94,12 +98,12 @@ async def unhandled_exception_handler(_, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
-@app.get("/api/health")
+@app.get("/health")
 async def health():
     return {"ok": True}
 
 
-@app.post("/api/register", response_model=Token)
+@app.post("/register", response_model=Token)
 def register(payload: UserCreate, db: Annotated[Session, Depends(get_db)]):
     existing = db.scalar(select(User).where(User.username == payload.username))
     if existing:
@@ -110,7 +114,7 @@ def register(payload: UserCreate, db: Annotated[Session, Depends(get_db)]):
     return Token(access_token=create_token(user.username))
 
 
-@app.post("/api/login", response_model=Token)
+@app.post("/login", response_model=Token)
 def login(payload: UserLogin, db: Annotated[Session, Depends(get_db)]):
     user = db.scalar(select(User).where(User.username == payload.username))
     if not user or not verify_password(payload.password, user.password_hash):
@@ -118,7 +122,7 @@ def login(payload: UserLogin, db: Annotated[Session, Depends(get_db)]):
     return Token(access_token=create_token(user.username))
 
 
-@app.get("/api/assets", response_model=list[AssetOut])
+@app.get("/assets", response_model=list[AssetOut])
 def list_assets(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
@@ -127,7 +131,7 @@ def list_assets(
     return [asset_to_out(asset) for asset in assets]
 
 
-@app.post("/api/assets", response_model=AssetOut)
+@app.post("/assets", response_model=AssetOut)
 def add_asset(
     payload: AssetCreate,
     user: Annotated[User, Depends(get_current_user)],
@@ -155,7 +159,7 @@ def add_asset(
     return asset_to_out(asset)
 
 
-@app.delete("/api/assets/{asset_id}")
+@app.delete("/assets/{asset_id}")
 def delete_asset(
     asset_id: int,
     user: Annotated[User, Depends(get_current_user)],
@@ -169,7 +173,7 @@ def delete_asset(
     return {"ok": True}
 
 
-@app.put("/api/assets/{asset_id}", response_model=AssetOut)
+@app.put("/assets/{asset_id}", response_model=AssetOut)
 def update_asset(
     asset_id: int,
     payload: AssetUpdate,
@@ -185,7 +189,7 @@ def update_asset(
     return asset_to_out(asset)
 
 
-@app.post("/api/refresh", response_model=SummaryOut)
+@app.post("/refresh", response_model=SummaryOut)
 async def refresh_prices(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
@@ -234,7 +238,7 @@ async def refresh_prices(
 
 
 
-@app.get("/api/summary", response_model=SummaryOut)
+@app.get("/summary", response_model=SummaryOut)
 def get_summary(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
@@ -250,7 +254,7 @@ def get_summary(
     )
 
 
-@app.get("/api/totals", response_model=list[TotalPointOut])
+@app.get("/totals", response_model=list[TotalPointOut])
 def get_totals(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
@@ -272,7 +276,7 @@ def get_totals(
     return points[offset : offset + limit]
 
 
-@app.get("/api/totals/detail", response_model=TotalsDetailOut)
+@app.get("/totals/detail", response_model=TotalsDetailOut)
 def get_totals_detail(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
@@ -329,7 +333,7 @@ def get_totals_detail(
     return TotalsDetailOut(assets=asset_columns, points=points)
 
 
-@app.get("/api/weekly-totals", response_model=list[TotalPointOut])
+@app.get("/weekly-totals", response_model=list[TotalPointOut])
 def get_weekly_totals(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
@@ -347,7 +351,7 @@ def get_weekly_totals(
     return points[offset : offset + limit]
 
 
-@app.post("/api/totals/snapshot", response_model=TotalPointOut)
+@app.post("/totals/snapshot", response_model=TotalPointOut)
 def snapshot_totals(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
