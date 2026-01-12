@@ -151,7 +151,13 @@ def add_asset(
         asset_type=asset_type if asset_type in {"stock", "crypto"} else asset_type_raw,
         quantity=payload.quantity,
     )
-    if asset_type not in {"stock", "crypto"}:
+    if payload.price_krw is not None:
+        asset.last_price_krw = payload.price_krw
+    if payload.price_usd is not None:
+        asset.last_price_usd = payload.price_usd
+    if asset.last_price_krw is not None or asset.last_price_usd is not None:
+        asset.last_updated = datetime.utcnow()
+    if asset_type not in {"stock", "crypto"} and asset.last_price_krw is None:
         asset.last_price_krw = 10000.0
     db.add(asset)
     db.commit()

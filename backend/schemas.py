@@ -22,6 +22,8 @@ class AssetCreate(BaseModel):
     symbol: str
     asset_type: str
     quantity: float = Field(gt=0)
+    price_krw: Optional[float] = Field(default=None, gt=0)
+    price_usd: Optional[float] = Field(default=None, gt=0)
 
 
 class AssetUpdate(BaseModel):

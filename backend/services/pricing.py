@@ -23,30 +23,30 @@ async def fetch_usd_krw_rate(client: httpx.AsyncClient) -> float:
     cached = _get_cached("usdkrw")
     if cached is not None:
         return cached
-    primary_url = "https://api.exchangerate.host/latest"
-    primary_params = {"base": "USD", "symbols": "KRW"}
-    response = await client.get(primary_url, params=primary_params, timeout=10)
+    primary_url = "https://open.er-api.com/v6/latest/USD"
     try:
+        response = await client.get(primary_url, timeout=10)
         response.raise_for_status()
         data = response.json()
         rates = data.get("rates")
         if not rates or "KRW" not in rates:
-            logger.warning("Exchange rate missing rates field: %s", str(data)[:200])
-            raise ValueError("Missing rates from exchangerate.host")
+            logger.warning("Primary FX missing rates field: %s", str(data)[:200])
+            raise ValueError("Missing rates from open.er-api.com")
         rate = float(rates["KRW"])
         _set_cache("usdkrw", rate)
         return rate
     except Exception as exc:
         logger.warning("Primary FX source failed: %s", exc)
 
-    fallback_url = "https://open.er-api.com/v6/latest/USD"
-    fallback_response = await client.get(fallback_url, timeout=10)
+    fallback_url = "https://api.frankfurter.app/latest"
+    fallback_params = {"from": "USD", "to": "KRW"}
+    fallback_response = await client.get(fallback_url, params=fallback_params, timeout=10)
     fallback_response.raise_for_status()
     fallback_data = fallback_response.json()
     rates = fallback_data.get("rates")
     if not rates or "KRW" not in rates:
         logger.warning("Fallback FX missing rates field: %s", str(fallback_data)[:200])
-        raise ValueError("Missing rates from fallback FX provider")
+        raise ValueError("Missing rates from frankfurter.app")
     rate = float(rates["KRW"])
     _set_cache("usdkrw", rate)
     return rate
@@ -103,7 +103,7 @@ async def get_price_krw(symbol: str, asset_type: str) -> PriceResult:
                     source="stooq+exchangerate",
                     price_usd=usd_price,
                 )
-            except httpx.HTTPStatusError as exc:
+            except (httpx.HTTPError, ValueError) as exc:
                 cached = _get_cached(f"stock:{symbol}", allow_stale=True)
                 cached_rate = _get_cached("usdkrw", allow_stale=True)
                 if cached is not None and cached_rate is not None:
@@ -118,7 +118,7 @@ async def get_price_krw(symbol: str, asset_type: str) -> PriceResult:
             try:
                 btc_price = await fetch_btc_krw_price(client)
                 return PriceResult(price_krw=btc_price, source="upbit")
-            except httpx.HTTPStatusError as exc:
+            except (httpx.HTTPError, ValueError) as exc:
                 cached = _get_cached("btc", allow_stale=True)
                 if cached is not None:
                     logger.warning("Using cached BTC price after error: %s", exc)
