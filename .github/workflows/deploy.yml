@@ -25,4 +25,7 @@ jobs:
         run: git pull --ff-only origin "${GITHUB_REF_NAME}"
 
       - name: Deploy
-        run: sudo ./deploy.sh --reset
+        run: ./deploy.sh
+
+      - name: Configure Tailscale Serve
+        run: sudo ./tailscale.sh --reset
