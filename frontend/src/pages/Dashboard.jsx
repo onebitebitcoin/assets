@@ -315,7 +315,7 @@ const Dashboard = () => {
               disabled={snapshotLoading}
               type="button"
             >
-              {snapshotLoading ? "저장 중..." : "테스트 저장"}
+              {snapshotLoading ? "저장 중..." : "스냅샷"}
             </button>
             <span className="chart-tag">{periodLabels[period]}</span>
           </div>
