@@ -418,7 +418,10 @@ const Dashboard = () => {
 
       <section className="panel">
         <div className="panel-header">
-          <h3>자산 변화</h3>
+          <div>
+            <h3>자산 변화</h3>
+            <p className="subtext">자산 추가 및 수정이 반영되지 않았으면 스냅샷 버튼을 클릭하세요.</p>
+          </div>
           <input
             type="text"
             placeholder="자산 검색 (이름, 심볼)"
