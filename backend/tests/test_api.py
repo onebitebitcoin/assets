@@ -155,6 +155,20 @@ def test_kr_stock_add_uses_pykrx_price(client, monkeypatch):
     assert data["last_price_krw"] == 73000.0
 
 
+def test_cash_asset_add(client):
+    token = register_and_login(client)
+    res = client.post(
+        "/api/assets",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"name": "현금", "symbol": "CASH", "asset_type": "cash", "quantity": 5},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["asset_type"] == "cash"
+    assert data["last_price_krw"] == 10000.0
+    assert data["value_krw"] == 50000.0
+
+
 def test_daily_totals_and_pagination(client):
     token = register_and_login(client)
 
