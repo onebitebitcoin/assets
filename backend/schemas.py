@@ -28,6 +28,7 @@ class AssetCreate(BaseModel):
 
 class AssetUpdate(BaseModel):
     quantity: float = Field(gt=0)
+    price_krw: Optional[float] = Field(default=None, gt=0)
 
 
 class AssetOut(BaseModel):

@@ -190,6 +190,9 @@ def update_asset(
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
     asset.quantity = payload.quantity
+    if payload.price_krw is not None:
+        asset.last_price_krw = payload.price_krw
+        asset.last_updated = datetime.utcnow()
     db.commit()
     db.refresh(asset)
     return asset_to_out(asset)

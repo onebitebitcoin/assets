@@ -21,13 +21,22 @@ const EditAssets = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [quantityEdits, setQuantityEdits] = useState({});
+  const [priceEdits, setPriceEdits] = useState({});
 
   const loadAssets = async () => {
     setLoading(true);
     setError("");
     try {
       const data = await listAssets();
-      setAssets(data);
+      const sorted = [...data].sort((a, b) => {
+        const aValue = a.value_krw ?? (a.last_price_krw || 0) * a.quantity;
+        const bValue = b.value_krw ?? (b.last_price_krw || 0) * b.quantity;
+        if (bValue !== aValue) {
+          return bValue - aValue;
+        }
+        return a.name.localeCompare(b.name, "ko-KR");
+      });
+      setAssets(sorted);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -45,10 +54,15 @@ const EditAssets = () => {
       return;
     }
     const next = {};
+    const nextPrices = {};
     assets.forEach((asset) => {
       next[asset.id] = String(Math.trunc(asset.quantity));
+      if (isCustomType(asset.asset_type)) {
+        nextPrices[asset.id] = asset.last_price_krw ? String(asset.last_price_krw) : "";
+      }
     });
     setQuantityEdits(next);
+    setPriceEdits(nextPrices);
   }, [assets]);
 
   useEffect(() => {
@@ -66,6 +80,13 @@ const EditAssets = () => {
   const parseQuantityInput = (value) => {
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed <= 0) {
+      return null;
+    }
+    return parsed;
+  };
+  const parsePriceInput = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
       return null;
     }
     return parsed;
@@ -202,11 +223,10 @@ const EditAssets = () => {
                       </div>
                       <p className="asset-meta">
                         {asset.symbol} · {asset.quantity}
-                        {isCustom ? "만원" : ""}
                       </p>
                       <div className="asset-quantity">
                         <label>
-                          {isCustom ? "금액(만원)" : "수량"}
+                          수량
                           <input
                             type="number"
                             min="1"
@@ -221,25 +241,55 @@ const EditAssets = () => {
                             }
                           />
                         </label>
+                        {isCustom ? (
+                          <label>
+                            단가(원)
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              inputMode="numeric"
+                              value={priceEdits[asset.id] ?? ""}
+                              onChange={(event) =>
+                                setPriceEdits((prev) => ({
+                                  ...prev,
+                                  [asset.id]: event.target.value
+                                }))
+                              }
+                            />
+                          </label>
+                        ) : null}
                         <button
                           className="primary small"
                           type="button"
                           disabled={
                             !parseQuantityInput(quantityEdits[asset.id]) ||
-                            parseQuantityInput(quantityEdits[asset.id]) ===
-                              Math.trunc(asset.quantity)
+                            (isCustom && !parsePriceInput(priceEdits[asset.id])) ||
+                            (parseQuantityInput(quantityEdits[asset.id]) ===
+                              Math.trunc(asset.quantity) &&
+                              (!isCustom ||
+                                parsePriceInput(priceEdits[asset.id]) === asset.last_price_krw))
                           }
                           onClick={() => {
                             const value = parseQuantityInput(quantityEdits[asset.id]);
                             if (!value) {
                               setError(
-                                isCustom
-                                  ? "금액은 1 이상의 정수(만원)만 가능합니다."
-                                  : "수량은 1 이상의 정수만 가능합니다."
+                                "수량은 1 이상의 정수만 가능합니다."
                               );
                               return;
                             }
-                            updateAsset(asset.id, { quantity: value })
+                            let priceValue = null;
+                            if (isCustom) {
+                              priceValue = parsePriceInput(priceEdits[asset.id]);
+                              if (!priceValue) {
+                                setError("단가는 1 이상의 숫자만 가능합니다.");
+                                return;
+                              }
+                            }
+                            updateAsset(asset.id, {
+                              quantity: value,
+                              ...(priceValue ? { price_krw: priceValue } : {})
+                            })
                               .then((updated) => {
                                 setAssets((prev) =>
                                   prev.map((item) => (item.id === asset.id ? updated : item))
@@ -248,6 +298,12 @@ const EditAssets = () => {
                                   ...prev,
                                   [asset.id]: String(value)
                                 }));
+                                if (priceValue) {
+                                  setPriceEdits((prev) => ({
+                                    ...prev,
+                                    [asset.id]: String(priceValue)
+                                  }));
+                                }
                               })
                               .catch((err) => {
                                 setError(err.message);
@@ -258,7 +314,7 @@ const EditAssets = () => {
                         </button>
                       </div>
                       {isCustom ? (
-                        <p className="asset-meta">단위: 1만원</p>
+                        <p className="asset-meta">단가를 수정할 수 있습니다.</p>
                       ) : (
                         <p className="asset-meta">
                           1주/1코인: {formatUSD(asset.last_price_usd)} ·{" "}
