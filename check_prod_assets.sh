@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Usage: ./check_prod_assets.sh <username> <password>
 
-API_BASE="https://ubuntu.golden-ghost.ts.net"
+API_BASE="https://ubuntu.golden-ghost.ts.net/api"
 USERNAME="${1:-}"
 PASSWORD="${2:-}"
 
