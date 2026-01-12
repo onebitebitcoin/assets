@@ -113,15 +113,38 @@ echo "Starting frontend on ${FRONTEND_PORT}..."
 npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" &
 FRONTEND_PID=$!
 
-trap 'kill ${BACKEND_PID} ${FRONTEND_PID} ${SERVE_FRONT_PID:-} ${SERVE_BACK_PID:-} 2>/dev/null || true' EXIT
+trap 'kill ${BACKEND_PID} ${FRONTEND_PID} 2>/dev/null || true' EXIT
+
+SERVE_BG_FLAG=""
+if tailscale serve --help 2>/dev/null | grep -q -- "--bg"; then
+  SERVE_BG_FLAG="--bg"
+fi
+
+apply_serve() {
+  local path="$1"
+  local target="$2"
+  local attempt=1
+  while [[ "${attempt}" -le 5 ]]; do
+    local output
+    output=$(tailscale serve --https="${EXTERNAL_PORT}" --set-path="${path}" ${SERVE_BG_FLAG} "${target}" 2>&1) && return 0
+    if echo "${output}" | grep -qi "etag mismatch"; then
+      echo "Serve config busy, retrying (${attempt}/5)..."
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+    echo "${output}" >&2
+    return 1
+  done
+  echo "Failed to update serve config after retries." >&2
+  return 1
+}
 
 echo "Mapping frontend to / on https port ${EXTERNAL_PORT} -> ${FRONTEND_PORT}"
-nohup tailscale serve --https="${EXTERNAL_PORT}" --set-path=/ "http://127.0.0.1:${FRONTEND_PORT}" >/tmp/ts-serve-frontend.log 2>&1 &
-SERVE_FRONT_PID=$!
+apply_serve "/" "http://127.0.0.1:${FRONTEND_PORT}"
 
 echo "Mapping backend to /api on https port ${EXTERNAL_PORT} -> ${BACKEND_PORT}"
-nohup tailscale serve --https="${EXTERNAL_PORT}" --set-path=/api "http://127.0.0.1:${BACKEND_PORT}" >/tmp/ts-serve-backend.log 2>&1 &
-SERVE_BACK_PID=$!
+apply_serve "/api" "http://127.0.0.1:${BACKEND_PORT}"
 
 sleep 1
 echo "Current tailscale serve status:"
