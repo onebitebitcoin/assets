@@ -8,4 +8,6 @@ frontend/dist/
 frontend/.vite/
 frontend/.cache/
 *.log
+logs/
+pids/
 .DS_Store

@@ -133,15 +133,24 @@ fi
 echo "Installing frontend deps..."
 npm --prefix frontend install
 
+LOG_DIR="${ROOT_DIR}/logs"
+mkdir -p "${LOG_DIR}"
+PID_DIR="${ROOT_DIR}/pids"
+mkdir -p "${PID_DIR}"
+
 echo "Starting backend on ${BACKEND_PORT}..."
-"${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${BACKEND_PORT}" &
+nohup "${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${BACKEND_PORT}" > "${LOG_DIR}/backend.log" 2>&1 &
 BACKEND_PID=$!
+echo "${BACKEND_PID}" > "${PID_DIR}/backend.pid"
+disown "${BACKEND_PID}"
+echo "Backend started with PID ${BACKEND_PID} (detached)"
 
 echo "Starting frontend on ${FRONTEND_PORT}..."
-npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" &
+nohup npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" > "${LOG_DIR}/frontend.log" 2>&1 &
 FRONTEND_PID=$!
-
-trap 'kill ${BACKEND_PID} ${FRONTEND_PID} 2>/dev/null || true' EXIT
+echo "${FRONTEND_PID}" > "${PID_DIR}/frontend.pid"
+disown "${FRONTEND_PID}"
+echo "Frontend started with PID ${FRONTEND_PID} (detached)"
 
 echo "Waiting for services to be ready..."
 for i in {1..30}; do
@@ -164,14 +173,11 @@ for i in {1..30}; do
   sleep 1
 done
 
-SERVE_LOG_DIR="${ROOT_DIR}/logs"
-mkdir -p "${SERVE_LOG_DIR}"
-
 apply_serve() {
   local path="$1"
   local target="$2"
   local attempt=1
-  local log_file="${SERVE_LOG_DIR}/tailscale-serve-$(echo "${path}" | tr '/' '_').log"
+  local log_file="${LOG_DIR}/tailscale-serve-$(echo "${path}" | tr '/' '_').log"
 
   while [[ "${attempt}" -le 5 ]]; do
     # ALWAYS use --bg flag for persistent configuration
@@ -269,9 +275,30 @@ echo ""
 if tailscale serve status 2>&1 | grep -q "no serve config"; then
   echo "WARNING: No serve config detected. The configuration may not have persisted." >&2
   echo "This usually indicates that tailscale serve --bg failed to save the configuration." >&2
-  echo "Check the logs in ${SERVE_LOG_DIR}/ for details." >&2
+  echo "Check the logs in ${LOG_DIR}/ for details." >&2
+  exit 1
 fi
 
-echo "Services are running. Press Ctrl+C to stop."
-echo "Frontend and Backend will be stopped, but Tailscale serve will persist."
-wait
+echo ""
+echo "========================================="
+echo "Deployment Complete!"
+echo "========================================="
+echo ""
+echo "Services are running in the background and will persist even if SSH disconnects."
+echo ""
+echo "Service PIDs:"
+echo "  Backend:  ${BACKEND_PID} (saved in ${PID_DIR}/backend.pid)"
+echo "  Frontend: ${FRONTEND_PID} (saved in ${PID_DIR}/frontend.pid)"
+echo ""
+echo "Logs:"
+echo "  Backend:  ${LOG_DIR}/backend.log"
+echo "  Frontend: ${LOG_DIR}/frontend.log"
+echo "  Tailscale: ${LOG_DIR}/tailscale-serve-*.log"
+echo ""
+echo "To stop services, run:"
+echo "  kill \$(cat ${PID_DIR}/backend.pid ${PID_DIR}/frontend.pid)"
+echo ""
+echo "To view logs:"
+echo "  tail -f ${LOG_DIR}/backend.log"
+echo "  tail -f ${LOG_DIR}/frontend.log"
+echo ""
