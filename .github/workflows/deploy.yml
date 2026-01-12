@@ -21,6 +21,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Debug workspace
+        run: |
+          echo "PWD: $(pwd)"
+          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+          ls -a
+          git status -sb
+          git remote -v
+
       - name: Pull latest changes
         run: git pull --ff-only origin "${GITHUB_REF_NAME}"
 
