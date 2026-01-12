@@ -26,6 +26,3 @@ jobs:
 
       - name: Deploy
         run: ./deploy.sh
-
-      - name: Configure Tailscale Serve
-        run: sudo ./tailscale.sh --reset
