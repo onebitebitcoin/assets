@@ -209,6 +209,10 @@ button:disabled {
   border: 1px solid rgba(59, 130, 246, 0.2);
 }
 
+.pie-card .chart-canvas {
+  height: 240px;
+}
+
 .chart-header {
   display: flex;
   justify-content: space-between;

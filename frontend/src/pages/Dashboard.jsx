@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import {
   Chart as ChartJS,
+  ArcElement,
   CategoryScale,
+  Legend,
   LinearScale,
   LineElement,
   PointElement,
   Tooltip
 } from "chart.js";
-import { Line } from "react-chartjs-2";
+import { Doughnut, Line } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
 import {
   clearToken,
@@ -17,7 +19,7 @@ import {
 } from "../api.js";
 import { formatDelta, formatKRW, formatUSD } from "../utils/format.js";
 
-ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip);
+ChartJS.register(ArcElement, CategoryScale, Legend, LinearScale, LineElement, PointElement, Tooltip);
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -149,6 +151,65 @@ const Dashboard = () => {
       }
     ]
   };
+  const allocationLabels = ["주식", "현금", "비트코인", "기타"];
+  const allocationColors = ["#60a5fa", "#34d399", "#fbbf24", "#94a3b8"];
+  const cashKeywords = ["현금", "예금", "적금", "통장", "cma", "파킹", "cash"];
+  const isCashLike = (asset) => {
+    const raw = `${asset.asset_type ?? ""} ${asset.name ?? ""} ${asset.symbol ?? ""}`;
+    const lowered = raw.toLowerCase();
+    return cashKeywords.some((keyword) => lowered.includes(keyword));
+  };
+  const allocationTotals = allocationLabels.reduce(
+    (acc, label) => ({ ...acc, [label]: 0 }),
+    {}
+  );
+  summary.assets.forEach((asset) => {
+    const value = (asset.last_price_krw || 0) * (asset.quantity || 0);
+    const type = asset.asset_type?.toLowerCase();
+    if (type === "stock" || type === "kr_stock") {
+      allocationTotals["주식"] += value;
+      return;
+    }
+    if (type === "crypto" && asset.symbol?.toUpperCase() === "BTC") {
+      allocationTotals["비트코인"] += value;
+      return;
+    }
+    if (isCashLike(asset)) {
+      allocationTotals["현금"] += value;
+      return;
+    }
+    allocationTotals["기타"] += value;
+  });
+  const allocationValues = allocationLabels.map((label) => allocationTotals[label]);
+  const allocationHasData = allocationValues.some((value) => value > 0);
+  const allocationData = {
+    labels: allocationLabels,
+    datasets: [
+      {
+        data: allocationValues,
+        backgroundColor: allocationColors,
+        borderWidth: 0
+      }
+    ]
+  };
+  const allocationOptions = {
+    plugins: {
+      legend: {
+        position: "bottom",
+        labels: {
+          color: "#cbd5f5",
+          usePointStyle: true,
+          padding: 16
+        }
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.label}: ${formatKRW(context.parsed)}`
+        }
+      }
+    },
+    cutout: "55%"
+  };
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -210,6 +271,22 @@ const Dashboard = () => {
           <h3 className={summary.daily_change_krw >= 0 ? "delta up" : "delta down"}>
             {formatDelta(summary.daily_change_krw)}
           </h3>
+        </div>
+      </section>
+
+      <section className="chart-card pie-card">
+        <div className="chart-header">
+          <div>
+            <p className="label">Portfolio Mix</p>
+            <h3>자산 비중</h3>
+          </div>
+        </div>
+        <div className="chart-canvas">
+          {allocationHasData ? (
+            <Doughnut data={allocationData} options={allocationOptions} />
+          ) : (
+            <p className="muted">데이터가 없습니다.</p>
+          )}
         </div>
       </section>
 
