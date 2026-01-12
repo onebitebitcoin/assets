@@ -32,6 +32,7 @@ const Dashboard = () => {
   const [periodHasMore, setPeriodHasMore] = useState(false);
   const [periodLoading, setPeriodLoading] = useState(false);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadSummary = async () => {
     try {
@@ -110,6 +111,13 @@ const Dashboard = () => {
       return bValue - aValue;
     }
     return a.name.localeCompare(b.name, "ko-KR");
+  });
+  const filteredTableColumns = sortedTableColumns.filter((asset) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const name = asset.name?.toLowerCase() || "";
+    const symbol = asset.symbol?.toLowerCase() || "";
+    return name.includes(query) || symbol.includes(query);
   });
   const formatAxisDate = (value) => {
     if (!value) return "-";
@@ -196,6 +204,8 @@ const Dashboard = () => {
     ]
   };
   const allocationOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
         position: "bottom",
@@ -276,75 +286,88 @@ const Dashboard = () => {
         </div>
       </section>
 
-      <section className="chart-card pie-card">
-        <div className="chart-header">
-          <div>
-            <p className="label">Portfolio Mix</p>
-            <h3>자산 비중</h3>
+      <section className="chart-card combined-charts">
+        <div className="charts-grid">
+          <div className="chart-section">
+            <div className="chart-header">
+              <div>
+                <p className="label">{periodLabels[period]} Total</p>
+                <h3>내 자산 변화 추이</h3>
+              </div>
+              <div className="chart-controls">
+                <select
+                  className="chart-select"
+                  value={period}
+                  onChange={(event) => setPeriod(event.target.value)}
+                >
+                  <option value="daily">일간</option>
+                  <option value="weekly">주간</option>
+                  <option value="monthly">월간</option>
+                </select>
+                <button
+                  className="ghost small"
+                  onClick={onSnapshot}
+                  disabled={snapshotLoading}
+                  type="button"
+                >
+                  {snapshotLoading ? "저장 중..." : "스냅샷"}
+                </button>
+                <span className="chart-tag">{periodLabels[period]}</span>
+              </div>
+            </div>
+            <div className="chart-canvas">
+              {chartValues.length ? (
+                <Line data={chartData} options={chartOptions} />
+              ) : (
+                <p className="muted">데이터가 없습니다.</p>
+              )}
+            </div>
+            <div className="chart-footer">
+              <p className="muted">
+                최근 {periodTotals.length}
+                {periodUnit[period]} 기준
+              </p>
+              {periodHasMore ? (
+                <button
+                  className="ghost small"
+                  onClick={() => loadTotals(periodOffset, true, period)}
+                  disabled={periodLoading}
+                >
+                  {periodLoading ? "불러오는 중..." : "더보기"}
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
-        <div className="chart-canvas">
-          {allocationHasData ? (
-            <Pie data={allocationData} options={allocationOptions} />
-          ) : (
-            <p className="muted">데이터가 없습니다.</p>
-          )}
-        </div>
-      </section>
 
-      <section className="chart-card">
-        <div className="chart-header">
-          <div>
-            <p className="label">{periodLabels[period]} Total</p>
-            <h3>내 자산 변화 추이</h3>
+          <div className="chart-section pie-section">
+            <div className="chart-header">
+              <div>
+                <p className="label">Portfolio Mix</p>
+                <h3>자산 비중</h3>
+              </div>
+            </div>
+            <div className="chart-canvas pie-canvas">
+              {allocationHasData ? (
+                <Pie data={allocationData} options={allocationOptions} />
+              ) : (
+                <p className="muted">데이터가 없습니다.</p>
+              )}
+            </div>
           </div>
-          <div className="chart-controls">
-            <select
-              className="chart-select"
-              value={period}
-              onChange={(event) => setPeriod(event.target.value)}
-            >
-              <option value="daily">일간</option>
-              <option value="weekly">주간</option>
-              <option value="monthly">월간</option>
-            </select>
-            <button
-              className="ghost small"
-              onClick={onSnapshot}
-              disabled={snapshotLoading}
-              type="button"
-            >
-              {snapshotLoading ? "저장 중..." : "스냅샷"}
-            </button>
-            <span className="chart-tag">{periodLabels[period]}</span>
-          </div>
-        </div>
-        <div className="chart-canvas">
-          {chartValues.length ? (
-            <Line data={chartData} options={chartOptions} />
-          ) : (
-            <p className="muted">데이터가 없습니다.</p>
-          )}
-        </div>
-        <div className="chart-footer">
-          <p className="muted">
-            최근 {periodTotals.length}
-            {periodUnit[period]} 기준
-          </p>
-          {periodHasMore ? (
-            <button
-              className="ghost small"
-              onClick={() => loadTotals(periodOffset, true, period)}
-              disabled={periodLoading}
-            >
-              {periodLoading ? "불러오는 중..." : "더보기"}
-            </button>
-          ) : null}
         </div>
       </section>
 
       <section className="panel">
-        <h3>자산 변화 테이블</h3>
+        <div className="panel-header">
+          <h3>자산 변화 테이블</h3>
+          <input
+            type="text"
+            placeholder="자산 검색 (이름, 심볼)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ maxWidth: "240px" }}
+          />
+        </div>
         {periodTotals.length ? (
           <div className="table-wrapper">
             <table className="asset-table">
@@ -373,7 +396,7 @@ const Dashboard = () => {
                     );
                   })}
                 </tr>
-                {sortedTableColumns.map((asset) => (
+                {filteredTableColumns.map((asset) => (
                   <tr key={asset.id}>
                     <td className="asset-name-col">
                       {asset.name} <span className="muted">({asset.symbol})</span>
