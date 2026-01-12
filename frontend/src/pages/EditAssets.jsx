@@ -328,7 +328,11 @@ const EditAssets = () => {
                         <p className="asset-name">{asset.name}</p>
                       </div>
                       <p className="asset-meta">
-                        {asset.symbol} · {asset.quantity}
+                        {asset.symbol} ·{" "}
+                        {new Intl.NumberFormat("ko-KR", {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 2
+                        }).format(asset.quantity)}
                       </p>
                       <div className="asset-quantity">
                         <label>
