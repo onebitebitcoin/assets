@@ -227,14 +227,14 @@ apply_serve() {
   return 1
 }
 
-echo "Mapping frontend to / on https port ${EXTERNAL_PORT} -> ${FRONTEND_PORT}"
-if ! apply_serve "/" "http://127.0.0.1:${FRONTEND_PORT}"; then
+echo "Mapping frontend to / on https port ${EXTERNAL_PORT} -> localhost:${FRONTEND_PORT}"
+if ! apply_serve "/" "localhost:${FRONTEND_PORT}"; then
   echo "ERROR: Failed to configure frontend path. Check tailscale logs." >&2
   exit 1
 fi
 
-echo "Mapping backend to /api on https port ${EXTERNAL_PORT} -> ${BACKEND_PORT}"
-if ! apply_serve "/api" "http://127.0.0.1:${BACKEND_PORT}"; then
+echo "Mapping backend to /api on https port ${EXTERNAL_PORT} -> localhost:${BACKEND_PORT}"
+if ! apply_serve "/api" "localhost:${BACKEND_PORT}"; then
   echo "ERROR: Failed to configure backend path. Check tailscale logs." >&2
   exit 1
 fi
