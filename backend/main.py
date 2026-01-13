@@ -132,6 +132,12 @@ def login(payload: UserLogin, db: Annotated[Session, Depends(get_db)]):
     return Token(access_token=create_token(user.username))
 
 
+@app.post("/refresh-token", response_model=Token)
+def refresh_token(user: Annotated[User, Depends(get_current_user)]):
+    """현재 토큰이 유효한 경우 새 토큰을 발급합니다."""
+    return Token(access_token=create_token(user.username))
+
+
 @app.get("/assets", response_model=list[AssetOut])
 def list_assets(
     user: Annotated[User, Depends(get_current_user)],
