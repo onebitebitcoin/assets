@@ -32,6 +32,7 @@ ChartJS.register(
 const Dashboard = () => {
   const navigate = useNavigate();
   const [summary, setSummary] = useState({ total_krw: 0, daily_change_krw: 0, assets: [] });
+  const [summaryLoading, setSummaryLoading] = useState(true);
   const [error, setError] = useState("");
   const [period, setPeriod] = useState("daily");
   const [periodTotals, setPeriodTotals] = useState([]);
@@ -50,11 +51,15 @@ const Dashboard = () => {
   });
 
   const loadSummary = async () => {
+    setSummaryLoading(true);
+    setError("");
     try {
       const data = await refreshSummary();
       setSummary(data);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSummaryLoading(false);
     }
   };
 
@@ -337,17 +342,31 @@ const Dashboard = () => {
       </header>
 
       <section className="summary-card">
-        <div>
-          <p className="label">총 자산</p>
-          <h2>{formatKRW(summary.total_krw)}</h2>
-        </div>
-        <div>
-          <p className="label">오늘 변화량</p>
-          <h3 className={summary.daily_change_krw >= 0 ? "delta up" : "delta down"}>
-            {formatDelta(summary.daily_change_krw)}
-          </h3>
-        </div>
+        {summaryLoading ? (
+          <div className="loading-state">
+            <p className="muted">잔액을 불러오는 중...</p>
+          </div>
+        ) : (
+          <>
+            <div>
+              <p className="label">총 자산</p>
+              <h2>{formatKRW(summary.total_krw)}</h2>
+            </div>
+            <div>
+              <p className="label">오늘 변화량</p>
+              <h3 className={summary.daily_change_krw >= 0 ? "delta up" : "delta down"}>
+                {formatDelta(summary.daily_change_krw)}
+              </h3>
+            </div>
+          </>
+        )}
       </section>
+
+      {error ? (
+        <section className="error-banner">
+          <p className="error">{error}</p>
+        </section>
+      ) : null}
 
       <section className="chart-card combined-charts">
         <div className="charts-grid">
@@ -574,8 +593,6 @@ const Dashboard = () => {
           <p className="muted">데이터가 없습니다.</p>
         )}
       </section>
-
-      {error ? <p className="error">{error}</p> : null}
     </div>
   );
 };
