@@ -10,8 +10,19 @@ from typing import Optional
 import httpx
 
 logger = logging.getLogger(__name__)
-_CACHE_TTL_SECONDS = 60
+
+# 자산 유형별 캐시 TTL (초)
+_CACHE_TTL_MAP = {
+    "usdkrw": 3600,      # 환율: 1시간
+    "stock": 300,        # 미국주식: 5분
+    "kr_stock": 300,     # 한국주식: 5분
+    "btc": 60,           # 비트코인: 1분
+}
+_DEFAULT_CACHE_TTL = 60
+
 _cache: dict[str, tuple[float, float]] = {}
+# SWR 백그라운드 갱신 추적
+_swr_pending: set[str] = set()
 
 
 @dataclass
@@ -166,15 +177,70 @@ async def get_price_krw(symbol: str, asset_type: str) -> PriceResult:
     raise ValueError("Unsupported asset type or symbol")
 
 
+def _get_cache_ttl(key: str) -> int:
+    """캐시 키에 해당하는 TTL 반환"""
+    for prefix, ttl in _CACHE_TTL_MAP.items():
+        if key == prefix or key.startswith(f"{prefix}:"):
+            return ttl
+    return _DEFAULT_CACHE_TTL
+
+
 def _get_cached(key: str, allow_stale: bool = False) -> Optional[float]:
     entry = _cache.get(key)
     if not entry:
         return None
     timestamp, value = entry
-    if allow_stale or (time() - timestamp) < _CACHE_TTL_SECONDS:
+    ttl = _get_cache_ttl(key)
+    if allow_stale or (time() - timestamp) < ttl:
         return value
     return None
 
 
+def _is_cache_fresh(key: str) -> bool:
+    """캐시가 아직 유효한지 확인"""
+    entry = _cache.get(key)
+    if not entry:
+        return False
+    timestamp, _ = entry
+    ttl = _get_cache_ttl(key)
+    return (time() - timestamp) < ttl
+
+
 def _set_cache(key: str, value: float) -> None:
     _cache[key] = (time(), value)
+
+
+async def _refresh_cache_background(key: str, fetch_coro) -> None:
+    """백그라운드에서 캐시 갱신 (SWR 패턴)"""
+    if key in _swr_pending:
+        return
+    _swr_pending.add(key)
+    try:
+        await fetch_coro
+    except Exception as exc:
+        logger.warning("Background cache refresh failed for %s: %s", key, exc)
+    finally:
+        _swr_pending.discard(key)
+
+
+async def get_price_krw_batch(assets: list[tuple[str, str]]) -> dict[str, PriceResult]:
+    """
+    여러 자산의 가격을 병렬로 조회합니다.
+
+    Args:
+        assets: [(symbol, asset_type), ...] 형태의 리스트
+
+    Returns:
+        {symbol: PriceResult} 형태의 딕셔너리. 실패한 경우 해당 키 없음.
+    """
+    async def fetch_single(symbol: str, asset_type: str) -> tuple[str, PriceResult | None]:
+        try:
+            result = await get_price_krw(symbol, asset_type)
+            return (symbol, result)
+        except Exception as exc:
+            logger.warning("Price fetch failed for %s: %s", symbol, exc)
+            return (symbol, None)
+
+    tasks = [fetch_single(symbol, asset_type) for symbol, asset_type in assets]
+    results = await asyncio.gather(*tasks)
+    return {symbol: result for symbol, result in results if result is not None}

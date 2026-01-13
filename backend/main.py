@@ -34,7 +34,7 @@ from .schemas import (
     TotalPointDetailOut,
     TotalsDetailOut,
 )
-from .services.pricing import get_price_krw
+from .services.pricing import get_price_krw, get_price_krw_batch
 
 logging.basicConfig(
     level=logging.INFO,
@@ -272,29 +272,41 @@ async def refresh_prices(
     total = 0.0
     asset_totals: list[tuple[Asset, float]] = []
     errors: list[str] = []
+
+    # 외부 API 호출이 필요한 자산과 아닌 자산 분류
+    fetch_targets: list[tuple[Asset, str, str]] = []  # (asset, symbol, asset_type)
     for asset in assets:
         asset_type = asset.asset_type.lower()
         if asset_type not in {"stock", "crypto", "kr_stock"}:
+            # 직접입력 자산: 외부 API 호출 불필요
             if asset.last_price_krw is None:
                 asset.last_price_krw = 0.0
             total += asset.last_price_krw * asset.quantity
             asset_totals.append((asset, asset.last_price_krw * asset.quantity))
-            continue
-        try:
-            price = await get_price_krw(asset.symbol, asset_type)
-            asset.last_price_krw = price.price_krw
-            asset.last_price_usd = price.price_usd
-            asset.last_updated = now_seoul()
-            total += price.price_krw * asset.quantity
-            asset_totals.append((asset, price.price_krw * asset.quantity))
-        except Exception as exc:
-            logger.exception("Price fetch failed for %s", asset.symbol)
-            errors.append(f"{asset.symbol} 가격 정보를 가져오지 못했습니다.")
-            if asset.last_price_krw is not None:
-                total += asset.last_price_krw * asset.quantity
-                asset_totals.append((asset, asset.last_price_krw * asset.quantity))
+        else:
+            fetch_targets.append((asset, asset.symbol, asset_type))
+
+    # 병렬로 가격 조회
+    if fetch_targets:
+        batch_input = [(symbol, asset_type) for _, symbol, asset_type in fetch_targets]
+        price_results = await get_price_krw_batch(batch_input)
+
+        now = now_seoul()
+        for asset, symbol, asset_type in fetch_targets:
+            price = price_results.get(symbol)
+            if price:
+                asset.last_price_krw = price.price_krw
+                asset.last_price_usd = price.price_usd
+                asset.last_updated = now
+                total += price.price_krw * asset.quantity
+                asset_totals.append((asset, price.price_krw * asset.quantity))
             else:
-                asset_totals.append((asset, 0.0))
+                errors.append(f"{symbol} 가격 정보를 가져오지 못했습니다.")
+                if asset.last_price_krw is not None:
+                    total += asset.last_price_krw * asset.quantity
+                    asset_totals.append((asset, asset.last_price_krw * asset.quantity))
+                else:
+                    asset_totals.append((asset, 0.0))
 
     today = today_seoul()
     upsert_daily_total(db, user.id, total, today)

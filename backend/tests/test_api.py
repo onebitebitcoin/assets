@@ -52,7 +52,14 @@ def test_asset_crud_and_summary(client, monkeypatch):
 
         return Price()
 
+    async def fake_price_batch(assets):
+        class Price:
+            price_krw = 1000.0
+            price_usd = 1.0
+        return {symbol: Price() for symbol, _ in assets}
+
     monkeypatch.setattr("backend.main.get_price_krw", fake_price)
+    monkeypatch.setattr("backend.main.get_price_krw_batch", fake_price_batch)
 
     res = client.post(
         "/assets",

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Chart as ChartJS,
   BarElement,
@@ -13,6 +13,7 @@ import { Bar, Line } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
 import {
   clearToken,
+  fetchSummary,
   fetchTotalsDetail,
   refreshSummary,
   snapshotTotals
@@ -31,8 +32,10 @@ ChartJS.register(
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const initialLoadDone = useRef(false);
   const [summary, setSummary] = useState({ total_krw: 0, daily_change_krw: 0, assets: [] });
   const [summaryLoading, setSummaryLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [period, setPeriod] = useState("daily");
   const [periodTotals, setPeriodTotals] = useState([]);
@@ -50,12 +53,47 @@ const Dashboard = () => {
     return window.matchMedia("(max-width: 640px)").matches;
   });
 
+  // Optimistic UI: 캐시된 값 먼저 표시 후 백그라운드에서 갱신
+  const loadSummaryOptimistic = async () => {
+    setSummaryLoading(true);
+    setError("");
+    try {
+      // 1단계: 캐시된 값 빠르게 표시 (GET /summary)
+      const cachedData = await fetchSummary();
+      setSummary(cachedData);
+      setSummaryLoading(false);
+
+      // 2단계: 백그라운드에서 최신 가격 갱신 (POST /refresh)
+      setRefreshing(true);
+      try {
+        const freshData = await refreshSummary();
+        setSummary(freshData);
+        if (freshData.errors && freshData.errors.length > 0) {
+          setError(freshData.errors.join(", "));
+        }
+      } catch (refreshErr) {
+        // 갱신 실패해도 캐시된 값은 이미 표시 중이므로 경고만 표시
+        console.warn("[Dashboard] Background refresh failed:", refreshErr.message);
+      } finally {
+        setRefreshing(false);
+      }
+    } catch (err) {
+      // 캐시 조회도 실패한 경우 에러 표시
+      setError(err.message);
+      setSummaryLoading(false);
+    }
+  };
+
+  // 강제 새로고침 (스냅샷 후 등)
   const loadSummary = async () => {
     setSummaryLoading(true);
     setError("");
     try {
       const data = await refreshSummary();
       setSummary(data);
+      if (data.errors && data.errors.length > 0) {
+        setError(data.errors.join(", "));
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -64,7 +102,15 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    loadSummary();
+    // 초기 로딩: summary와 totals를 병렬로 요청
+    const loadInitialData = async () => {
+      await Promise.all([
+        loadSummaryOptimistic(),
+        loadTotals(0, false, period)
+      ]);
+      initialLoadDone.current = true;
+    };
+    loadInitialData();
   }, []);
 
   useEffect(() => {
@@ -108,6 +154,8 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    // 초기 로딩은 위에서 병렬로 처리하므로 skip
+    if (!initialLoadDone.current) return;
     loadTotals(0, false, period);
   }, [period]);
 
@@ -344,6 +392,7 @@ const Dashboard = () => {
       <section className="summary-card">
         {summaryLoading ? (
           <div className="loading-state">
+            <span className="spinner large" />
             <p className="muted">잔액을 불러오는 중...</p>
           </div>
         ) : (
@@ -358,6 +407,12 @@ const Dashboard = () => {
                 {formatDelta(summary.daily_change_krw)}
               </h3>
             </div>
+            {refreshing && (
+              <div className="refresh-indicator">
+                <span className="spinner small" />
+                <span>가격 갱신 중...</span>
+              </div>
+            )}
           </>
         )}
       </section>
