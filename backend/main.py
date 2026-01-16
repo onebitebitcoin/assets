@@ -254,9 +254,10 @@ async def refresh_single_asset(
             asset.last_updated = now_seoul()
         except Exception as exc:
             logger.exception("Price fetch failed for %s", asset.symbol)
+            api_name = {"stock": "미국주식 API", "kr_stock": "국내주식 API", "crypto": "비트코인 API"}.get(asset_type, asset_type)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"{asset.symbol} 가격 정보를 가져오지 못했습니다."
+                detail=f"{asset.symbol} 가격 조회 실패 ({api_name})"
             )
 
     db.commit()
@@ -302,7 +303,8 @@ async def refresh_prices(
                 total += price.price_krw * asset.quantity
                 asset_totals.append((asset, price.price_krw * asset.quantity))
             else:
-                errors.append(f"{symbol} 가격 정보를 가져오지 못했습니다.")
+                api_name = {"stock": "미국주식 API", "kr_stock": "국내주식 API", "crypto": "비트코인 API"}.get(asset_type, asset_type)
+                errors.append(f"{symbol} 가격 조회 실패 ({api_name})")
                 if asset.last_price_krw is not None:
                     total += asset.last_price_krw * asset.quantity
                     asset_totals.append((asset, asset.last_price_krw * asset.quantity))
