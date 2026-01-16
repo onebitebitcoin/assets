@@ -317,11 +317,23 @@ async def refresh_prices(
 
     daily_change = compute_daily_change(user.id, db)
     error_payload = errors if errors else None
+
+    # 마지막 갱신 시간
+    last_updated_times = [a.last_updated for a in assets if a.last_updated]
+    last_refreshed = max(last_updated_times) if last_updated_times else None
+
+    # 다음 갱신 예정 시간 (30분 간격)
+    next_refresh_at = None
+    if last_refreshed:
+        next_refresh_at = last_refreshed + timedelta(minutes=30)
+
     return SummaryOut(
         total_krw=total,
         daily_change_krw=daily_change,
         assets=[asset_to_out(a) for a in assets],
         errors=error_payload,
+        last_refreshed=last_refreshed,
+        next_refresh_at=next_refresh_at,
     )
 
 
