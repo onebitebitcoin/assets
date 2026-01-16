@@ -11,6 +11,7 @@ import {
 } from "chart.js";
 import { Doughnut, Line } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
+import { LogOut, Plus, RefreshCw } from "lucide-react";
 import {
   clearToken,
   fetchSummary,
@@ -346,67 +347,72 @@ const Dashboard = () => {
     isMobile && !cardHistoryOpen[key] ? periodTotals.slice(0, 1) : periodTotals.slice(0, 10);
 
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <div>
-          <p className="eyebrow">My Daily Assets</p>
-          <h1>내 자산</h1>
-          <p className="subtext">총 자산과 하루 변화량을 원화로 확인합니다.</p>
-        </div>
-        <div className="header-actions">
+    <>
+      <nav className="navbar">
+        <span className="navbar-title">My Daily Assets</span>
+        <div className="navbar-actions">
           <button
-            className="ghost"
-            onClick={handleManualRefresh}
-            disabled={refreshing}
+            className="icon-btn"
+            onClick={onEditAssets}
+            title="자산 추가"
+            type="button"
           >
-            {refreshing ? "갱신 중..." : "가격 새로고침"}
+            <Plus size={20} />
           </button>
-          <button className="ghost" onClick={onEditAssets}>
-            자산 추가
-          </button>
-          <button className="ghost" onClick={onLogout}>
-            로그아웃
+          <button
+            className="icon-btn"
+            onClick={onLogout}
+            title="로그아웃"
+            type="button"
+          >
+            <LogOut size={20} />
           </button>
         </div>
-      </header>
+      </nav>
 
-      <section className="summary-card">
-        {summaryLoading ? (
-          <div className="loading-state">
-            <span className="spinner large" />
-            <p className="muted">잔액을 불러오는 중...</p>
-          </div>
-        ) : (
-          <>
-            <div>
-              <p className="label">총 자산</p>
-              <h2>{formatKRW(summary.total_krw)}</h2>
+      <div className="dashboard">
+        <section className="summary-card">
+          {summaryLoading ? (
+            <div className="loading-state">
+              <span className="spinner large" />
+              <p className="muted">잔액을 불러오는 중...</p>
             </div>
-            <div>
-              <p className="label">오늘 변화량</p>
-              <h3 className={summary.daily_change_krw >= 0 ? "delta up" : "delta down"}>
-                {formatDelta(summary.daily_change_krw)}
-              </h3>
-            </div>
-            {refreshing && (
-              <div className="refresh-indicator">
-                <span className="spinner small" />
-                <span>가격 갱신 중...</span>
+          ) : (
+            <>
+              <div className="summary-total">
+                <p className="label">총 자산</p>
+                <div className="summary-total-row">
+                  <h2>{formatKRW(summary.total_krw)}</h2>
+                  <button
+                    className="icon-btn refresh-btn"
+                    onClick={handleManualRefresh}
+                    disabled={refreshing}
+                    title="가격 새로고침"
+                    type="button"
+                  >
+                    <RefreshCw size={18} className={refreshing ? "spinning" : ""} />
+                  </button>
+                </div>
               </div>
-            )}
-            {summary.last_refreshed ? (
-              <p className="refresh-info muted">
-                {formatRelativeTime(summary.last_refreshed)}에 업데이트됨
-                {summary.next_refresh_at && ` · 다음 갱신: ${formatRelativeTime(summary.next_refresh_at)}`}
-              </p>
-            ) : (
-              <p className="refresh-info muted">
-                아직 가격이 갱신되지 않았습니다
-              </p>
-            )}
-          </>
-        )}
-      </section>
+              <div>
+                <p className="label">오늘 변화량</p>
+                <h3 className={summary.daily_change_krw >= 0 ? "delta up" : "delta down"}>
+                  {formatDelta(summary.daily_change_krw)}
+                </h3>
+              </div>
+              {summary.last_refreshed ? (
+                <p className="refresh-info muted">
+                  {formatRelativeTime(summary.last_refreshed)}에 업데이트됨
+                  {summary.next_refresh_at && ` · 다음 갱신: ${formatRelativeTime(summary.next_refresh_at)}`}
+                </p>
+              ) : (
+                <p className="refresh-info muted">
+                  아직 가격이 갱신되지 않았습니다
+                </p>
+              )}
+            </>
+          )}
+        </section>
 
       {error ? (
         <section className="error-banner">
@@ -657,7 +663,8 @@ const Dashboard = () => {
           <p className="muted">데이터가 없습니다.</p>
         )}
       </section>
-    </div>
+      </div>
+    </>
   );
 };
 
