@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { clearToken, listAssets, refreshSummary } from "../api.js";
+import { clearToken, listAssets, refreshAsset, refreshSummary } from "../api.js";
 import { formatKRW, formatUSD } from "../utils/format.js";
 
 const Settings = () => {
@@ -10,6 +10,7 @@ const Settings = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshingAssets, setRefreshingAssets] = useState({});
 
   const loadAssets = async () => {
     setLoading(true);
@@ -56,6 +57,23 @@ const Settings = () => {
       setError(err.message);
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const onRefreshAsset = async (assetId) => {
+    setRefreshingAssets((prev) => ({ ...prev, [assetId]: true }));
+    setError("");
+    setSuccess("");
+    try {
+      const updated = await refreshAsset(assetId);
+      setAssets((prev) =>
+        prev.map((item) => (item.id === assetId ? updated : item))
+      );
+      setSuccess(`${updated.name} 가격이 업데이트되었습니다.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRefreshingAssets((prev) => ({ ...prev, [assetId]: false }));
     }
   };
 
@@ -199,6 +217,15 @@ const Settings = () => {
                   <div className="recent-update-time">
                     {formatUpdatedAt(asset.last_updated)}
                   </div>
+                  <button
+                    className="icon-btn small"
+                    onClick={() => onRefreshAsset(asset.id)}
+                    disabled={refreshingAssets[asset.id]}
+                    title="가격 새로고침"
+                    type="button"
+                  >
+                    <i className={`fa-solid fa-arrows-rotate${refreshingAssets[asset.id] ? " spinning" : ""}`} />
+                  </button>
                 </div>
               ))}
             </div>
