@@ -9,13 +9,14 @@ from backend.services.pricing import fetch_stock_usd_price
 async def test_fetch_stock_usd_price_tsla():
     async with httpx.AsyncClient() as client:
         try:
-            price = await fetch_stock_usd_price("TSLA", client)
+            price, source = await fetch_stock_usd_price("TSLA", client)
         except httpx.HTTPStatusError as exc:
             if exc.response is not None and exc.response.status_code == 429:
                 pytest.skip("Yahoo Finance rate limited (429).")
             raise
 
     assert price > 0
+    assert source in ("yahoo", "stooq")
 
 
 @pytest.mark.anyio
@@ -40,7 +41,7 @@ async def test_fetch_usd_krw_rate_primary():
 async def test_get_price_krw_stock(monkeypatch):
     pricing._cache.clear()
     async def fake_stock_price(_symbol, _client):
-        return 10.0
+        return 10.0, "yahoo"
 
     async def fake_rate(_client):
         return 1200.0
@@ -51,6 +52,7 @@ async def test_get_price_krw_stock(monkeypatch):
     result = await pricing.get_price_krw("AAPL", "stock")
     assert result.price_krw == 12000.0
     assert result.price_usd == 10.0
+    assert result.source == "yahoo"
 
 
 @pytest.mark.anyio

@@ -120,17 +120,17 @@ async def _fetch_from_yahoo(symbol: str, client: httpx.AsyncClient) -> float:
     return price
 
 
-async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> float:
-    """미국주식 USD 가격 조회 (Yahoo Finance 1차, Stooq 2차)"""
-    cached = _get_cached(f"stock:{symbol}")
-    if cached is not None:
-        return cached
+async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> tuple[float, str]:
+    """미국주식 USD 가격 조회 (Yahoo Finance 1차, Stooq 2차)
 
+    Returns:
+        (price, source) 튜플. source는 "yahoo", "stooq", "cache" 중 하나.
+    """
     # 1차: Yahoo Finance API (실시간 가격)
     try:
         price = await _fetch_from_yahoo(symbol, client)
         _set_cache(f"stock:{symbol}", price)
-        return price
+        return price, "yahoo"
     except Exception as exc:
         logger.warning("Yahoo Finance failed for %s: %s, trying Stooq", symbol, exc)
 
@@ -138,7 +138,7 @@ async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> float
     try:
         price = await _fetch_from_stooq(symbol, client)
         _set_cache(f"stock:{symbol}", price)
-        return price
+        return price, "stooq"
     except Exception as exc:
         logger.error("Stooq also failed for %s: %s", symbol, exc)
         raise ValueError(f"All price sources failed for {symbol}")
@@ -188,11 +188,11 @@ async def get_price_krw(symbol: str, asset_type: str) -> PriceResult:
     async with httpx.AsyncClient() as client:
         if asset_type == "stock":
             try:
-                usd_price = await fetch_stock_usd_price(symbol, client)
+                usd_price, price_source = await fetch_stock_usd_price(symbol, client)
                 rate = await fetch_usd_krw_rate(client)
                 return PriceResult(
                     price_krw=usd_price * rate,
-                    source="yahoo+exchangerate",
+                    source=price_source,
                     price_usd=usd_price,
                 )
             except (httpx.HTTPError, ValueError) as exc:
