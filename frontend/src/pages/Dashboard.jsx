@@ -18,7 +18,7 @@ import {
   refreshSummary,
   snapshotTotals
 } from "../api.js";
-import { formatDelta, formatKRW, formatUSD } from "../utils/format.js";
+import { formatDelta, formatKRW, formatRelativeTime, formatUSD } from "../utils/format.js";
 
 ChartJS.register(
   BarElement,
@@ -53,40 +53,23 @@ const Dashboard = () => {
     return window.matchMedia("(max-width: 640px)").matches;
   });
 
-  // Optimistic UI: 캐시된 값 먼저 표시 후 백그라운드에서 갱신
-  const loadSummaryOptimistic = async () => {
+  // 페이지 로드 시 GET만 호출 (저장된 데이터 표시)
+  const loadSummary = async () => {
     setSummaryLoading(true);
     setError("");
     try {
-      // 1단계: 캐시된 값 빠르게 표시 (GET /summary)
-      const cachedData = await fetchSummary();
-      setSummary(cachedData);
-      setSummaryLoading(false);
-
-      // 2단계: 백그라운드에서 최신 가격 갱신 (POST /refresh)
-      setRefreshing(true);
-      try {
-        const freshData = await refreshSummary();
-        setSummary(freshData);
-        if (freshData.errors && freshData.errors.length > 0) {
-          setError(freshData.errors.join(", "));
-        }
-      } catch (refreshErr) {
-        // 갱신 실패해도 캐시된 값은 이미 표시 중이므로 경고만 표시
-        console.warn("[Dashboard] Background refresh failed:", refreshErr.message);
-      } finally {
-        setRefreshing(false);
-      }
+      const data = await fetchSummary();
+      setSummary(data);
     } catch (err) {
-      // 캐시 조회도 실패한 경우 에러 표시
       setError(err.message);
+    } finally {
       setSummaryLoading(false);
     }
   };
 
-  // 강제 새로고침 (스냅샷 후 등)
-  const loadSummary = async () => {
-    setSummaryLoading(true);
+  // 수동 새로고침 (POST /refresh 호출)
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
     setError("");
     try {
       const data = await refreshSummary();
@@ -97,7 +80,7 @@ const Dashboard = () => {
     } catch (err) {
       setError(err.message);
     } finally {
-      setSummaryLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -105,7 +88,7 @@ const Dashboard = () => {
     // 초기 로딩: summary와 totals를 병렬로 요청
     const loadInitialData = async () => {
       await Promise.all([
-        loadSummaryOptimistic(),
+        loadSummary(),
         loadTotals(0, false, period)
       ]);
       initialLoadDone.current = true;
@@ -380,6 +363,13 @@ const Dashboard = () => {
           <p className="subtext">총 자산과 하루 변화량을 원화로 확인합니다.</p>
         </div>
         <div className="header-actions">
+          <button
+            className="ghost"
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? "갱신 중..." : "가격 새로고침"}
+          </button>
           <button className="ghost" onClick={onEditAssets}>
             자산 추가
           </button>
@@ -412,6 +402,12 @@ const Dashboard = () => {
                 <span className="spinner small" />
                 <span>가격 갱신 중...</span>
               </div>
+            )}
+            {summary.last_refreshed && (
+              <p className="refresh-info muted">
+                {formatRelativeTime(summary.last_refreshed)}에 업데이트됨
+                {summary.next_refresh_at && ` · 다음 갱신: ${formatRelativeTime(summary.next_refresh_at)}`}
+              </p>
             )}
           </>
         )}

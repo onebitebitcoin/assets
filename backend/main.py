@@ -15,6 +15,7 @@ from sqlalchemy import select, and_, text
 from sqlalchemy.orm import Session
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from .auth import hash_password, verify_password, create_token
 from .config import settings
@@ -333,11 +334,23 @@ def get_summary(
     assets = db.scalars(select(Asset).where(Asset.user_id == user.id)).all()
     total = sum((a.last_price_krw or 0) * a.quantity for a in assets)
     daily_change = compute_daily_change(user.id, db)
+
+    # 마지막 갱신 시간
+    last_updated_times = [a.last_updated for a in assets if a.last_updated]
+    last_refreshed = max(last_updated_times) if last_updated_times else None
+
+    # 다음 갱신 예정 시간 (30분 간격)
+    next_refresh_at = None
+    if last_refreshed:
+        next_refresh_at = last_refreshed + timedelta(minutes=30)
+
     return SummaryOut(
         total_krw=total,
         daily_change_krw=daily_change,
         assets=[asset_to_out(a) for a in assets],
         errors=None,
+        last_refreshed=last_refreshed,
+        next_refresh_at=next_refresh_at,
     )
 
 
@@ -594,6 +607,64 @@ def run_daily_snapshot():
         db.close()
 
 
+async def refresh_all_asset_prices():
+    """모든 사용자의 자산 가격을 일괄 갱신 (중복 심볼은 1회만 조회)"""
+    db = SessionLocal()
+    try:
+        all_assets = db.scalars(select(Asset)).all()
+        if not all_assets:
+            logger.info("No assets to refresh")
+            return
+
+        # 중복 제거: (symbol, asset_type) 기준
+        unique_symbols: dict[tuple[str, str], list[Asset]] = {}
+        for asset in all_assets:
+            asset_type = asset.asset_type.lower()
+            if asset_type not in {"stock", "crypto", "kr_stock"}:
+                continue  # 직접입력 자산은 스킵
+            key = (asset.symbol, asset_type)
+            if key not in unique_symbols:
+                unique_symbols[key] = []
+            unique_symbols[key].append(asset)
+
+        if not unique_symbols:
+            logger.info("No external assets to refresh")
+            return
+
+        # 병렬 가격 조회
+        batch_input = list(unique_symbols.keys())
+        price_results = await get_price_krw_batch(batch_input)
+
+        # 모든 관련 자산에 가격 적용
+        now = now_seoul()
+        for (symbol, _), assets in unique_symbols.items():
+            price = price_results.get(symbol)
+            if price:
+                for asset in assets:
+                    asset.last_price_krw = price.price_krw
+                    asset.last_price_usd = price.price_usd
+                    asset.last_updated = now
+
+        db.commit()
+        logger.info("Scheduled price refresh completed: %d symbols", len(price_results))
+    except Exception as exc:
+        logger.exception("Scheduled price refresh failed: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
+
+
+def run_scheduled_price_refresh():
+    """스케줄러용 동기 래퍼"""
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    loop.run_until_complete(refresh_all_asset_prices())
+
+
 def asset_to_out(asset: Asset) -> AssetOut:
     value = None
     if asset.last_price_krw is not None:
@@ -614,7 +685,17 @@ def asset_to_out(asset: Asset) -> AssetOut:
 @app.on_event("startup")
 def start_scheduler():
     if not scheduler.get_jobs():
+        # 기존: 자정 스냅샷
         scheduler.add_job(run_daily_snapshot, CronTrigger(hour=0, minute=0))
+
+        # 신규: 30분마다 가격 갱신
+        scheduler.add_job(
+            run_scheduled_price_refresh,
+            IntervalTrigger(minutes=30),
+            id="price_refresh",
+            name="30분마다 자산 가격 갱신",
+            replace_existing=True
+        )
     if not scheduler.running:
         scheduler.start()
 

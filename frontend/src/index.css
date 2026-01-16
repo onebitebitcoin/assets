@@ -741,6 +741,11 @@ button:disabled {
   animation: fadeIn 0.2s ease;
 }
 
+.refresh-info {
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

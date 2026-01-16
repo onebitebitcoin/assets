@@ -51,6 +51,8 @@ class SummaryOut(BaseModel):
     daily_change_krw: float
     assets: list[AssetOut]
     errors: Optional[list[str]] = None
+    last_refreshed: Optional[datetime] = None
+    next_refresh_at: Optional[datetime] = None
 
 
 class TotalPointOut(BaseModel):
