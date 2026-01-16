@@ -129,11 +129,11 @@ const Dashboard = () => {
   const loadTotals = async (offset = 0, append = false, nextPeriod = period) => {
     setPeriodLoading(true);
     try {
-      const data = await fetchTotalsDetail(nextPeriod, 10, offset);
+      const data = await fetchTotalsDetail(nextPeriod, 7, offset);
       setPeriodTotals((prev) => (append ? [...prev, ...data.points] : data.points));
       setTableColumns(data.assets || []);
       setPeriodOffset(offset + data.points.length);
-      setPeriodHasMore(data.points.length === 10);
+      setPeriodHasMore(data.points.length === 7);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -344,7 +344,7 @@ const Dashboard = () => {
     }
   };
   const getCardPeriods = (key) =>
-    isMobile && !cardHistoryOpen[key] ? periodTotals.slice(0, 1) : periodTotals.slice(0, 10);
+    isMobile && !cardHistoryOpen[key] ? periodTotals.slice(0, 1) : periodTotals.slice(0, 7);
 
   return (
     <>
