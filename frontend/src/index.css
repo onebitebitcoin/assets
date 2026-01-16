@@ -1056,4 +1056,78 @@ button:disabled {
     justify-content: center;
     padding: 0.9rem 1.2rem;
   }
+
+  .settings-price-cards {
+    display: flex;
+  }
+}
+
+/* Settings 페이지 스타일 */
+.settings-price-table .update-time {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.settings-price-cards {
+  display: none;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.settings-price-card {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.settings-price-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.settings-price-card-header h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.settings-price-card-type {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.settings-price-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settings-price-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.settings-price-row .label {
+  color: #94a3b8;
+}
+
+.settings-price-row.total {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  font-weight: 600;
+}
+
+.settings-price-card-footer {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 0.8rem;
 }

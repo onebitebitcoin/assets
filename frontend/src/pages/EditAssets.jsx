@@ -268,7 +268,8 @@ const EditAssets = () => {
     }
     const raw = typeof value === "string" ? value : value.toString();
     const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
-    const date = new Date(hasTimezone ? raw : `${raw}Z`);
+    // 타임존 정보가 없으면 한국 시간(+09:00)으로 해석
+    const date = new Date(hasTimezone ? raw : `${raw}+09:00`);
     if (Number.isNaN(date.getTime())) {
       return "-";
     }
@@ -300,6 +301,14 @@ const EditAssets = () => {
             type="button"
           >
             <i className="fa-solid fa-grip" />
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => navigate("/settings")}
+            title="설정"
+            type="button"
+          >
+            <i className="fa-solid fa-gear" />
           </button>
           <button
             className="icon-btn"

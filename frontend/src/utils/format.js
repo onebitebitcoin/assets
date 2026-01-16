@@ -30,7 +30,10 @@ export const formatDelta = (value) => {
 
 export const formatRelativeTime = (dateString) => {
   if (!dateString) return "";
-  const date = new Date(dateString);
+  const raw = typeof dateString === "string" ? dateString : dateString.toString();
+  const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
+  // 타임존 정보가 없으면 한국 시간(+09:00)으로 해석
+  const date = new Date(hasTimezone ? raw : `${raw}+09:00`);
   const now = new Date();
   const diffMs = now - date;
   const diffMin = Math.floor(diffMs / 60000);

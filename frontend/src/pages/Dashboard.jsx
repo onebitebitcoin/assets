@@ -355,10 +355,18 @@ const Dashboard = () => {
           <button
             className="icon-btn"
             onClick={onEditAssets}
-            title="자산 추가"
+            title="자산 관리"
             type="button"
           >
-            <i className="fa-solid fa-plus" />
+            <i className="fa-solid fa-pen-to-square" />
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => navigate("/settings")}
+            title="설정"
+            type="button"
+          >
+            <i className="fa-solid fa-gear" />
           </button>
           <button
             className="icon-btn"

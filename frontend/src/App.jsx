@@ -3,6 +3,7 @@ import Login from "./pages/Login.jsx";
 import Signup from "./pages/Signup.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import EditAssets from "./pages/EditAssets.jsx";
+import Settings from "./pages/Settings.jsx";
 import { getToken } from "./api.js";
 
 const RequireAuth = ({ children }) => {
@@ -31,6 +32,14 @@ const App = () => (
       element={
         <RequireAuth>
           <EditAssets />
+        </RequireAuth>
+      }
+    />
+    <Route
+      path="/settings"
+      element={
+        <RequireAuth>
+          <Settings />
         </RequireAuth>
       }
     />
