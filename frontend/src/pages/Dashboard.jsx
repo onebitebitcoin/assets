@@ -11,29 +11,6 @@ import {
 } from "chart.js";
 import { Doughnut, Line } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
-// SVG 아이콘 컴포넌트
-const IconPlus = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="12" y1="5" x2="12" y2="19" />
-    <line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
-);
-
-const IconLogOut = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-    <polyline points="16 17 21 12 16 7" />
-    <line x1="21" y1="12" x2="9" y2="12" />
-  </svg>
-);
-
-const IconRefresh = ({ className }) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <polyline points="23 4 23 10 17 10" />
-    <polyline points="1 20 1 14 7 14" />
-    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-  </svg>
-);
 import {
   clearToken,
   fetchSummary,
@@ -381,7 +358,7 @@ const Dashboard = () => {
             title="자산 추가"
             type="button"
           >
-            <IconPlus />
+            <i className="fa-solid fa-plus" />
           </button>
           <button
             className="icon-btn"
@@ -389,7 +366,7 @@ const Dashboard = () => {
             title="로그아웃"
             type="button"
           >
-            <IconLogOut />
+            <i className="fa-solid fa-right-from-bracket" />
           </button>
         </div>
       </nav>
@@ -414,7 +391,7 @@ const Dashboard = () => {
                     title="가격 새로고침"
                     type="button"
                   >
-                    <IconRefresh className={refreshing ? "spinning" : ""} />
+                    <i className={`fa-solid fa-arrows-rotate${refreshing ? " spinning" : ""}`} />
                   </button>
                 </div>
               </div>
