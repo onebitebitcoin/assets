@@ -67,15 +67,15 @@ a:hover {
   height: 36px;
   border: none;
   border-radius: 10px;
-  background: transparent;
-  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+  color: #e2e8f0;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .icon-btn:hover {
-  background: rgba(148, 163, 184, 0.12);
-  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.25);
+  color: #f8fafc;
 }
 
 .icon-btn:disabled {
