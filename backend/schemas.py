@@ -46,6 +46,10 @@ class AssetOut(BaseModel):
     value_krw: Optional[float]
 
 
+class AssetRefreshOut(AssetOut):
+    source: Optional[str] = None
+
+
 class SummaryOut(BaseModel):
     total_krw: float
     daily_change_krw: float

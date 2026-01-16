@@ -69,7 +69,8 @@ const Settings = () => {
       setAssets((prev) =>
         prev.map((item) => (item.id === assetId ? updated : item))
       );
-      setSuccess(`${updated.name} 가격이 업데이트되었습니다.`);
+      const sourceText = updated.source ? ` (${updated.source})` : "";
+      setSuccess(`${updated.name} 가격이 업데이트되었습니다.${sourceText}`);
     } catch (err) {
       setError(err.message);
     } finally {

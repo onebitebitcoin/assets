@@ -28,6 +28,7 @@ from .schemas import (
     AssetCreate,
     AssetUpdate,
     AssetOut,
+    AssetRefreshOut,
     SummaryOut,
     TotalPointOut,
     AssetColumnOut,
@@ -231,7 +232,7 @@ def update_asset(
     return asset_to_out(asset)
 
 
-@app.post("/assets/{asset_id}/refresh", response_model=AssetOut)
+@app.post("/assets/{asset_id}/refresh", response_model=AssetRefreshOut)
 async def refresh_single_asset(
     asset_id: int,
     user: Annotated[User, Depends(get_current_user)],
@@ -242,16 +243,19 @@ async def refresh_single_asset(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
 
     asset_type = asset.asset_type.lower()
+    source = None
     if asset_type not in {"stock", "crypto", "kr_stock"}:
         if asset.last_price_krw is None:
             asset.last_price_krw = 0.0
         asset.last_updated = now_seoul()
+        source = "직접입력"
     else:
         try:
             price = await get_price_krw(asset.symbol, asset_type)
             asset.last_price_krw = price.price_krw
             asset.last_price_usd = price.price_usd
             asset.last_updated = now_seoul()
+            source = price.source
         except Exception as exc:
             logger.exception("Price fetch failed for %s", asset.symbol)
             api_name = {"stock": "미국주식 API", "kr_stock": "국내주식 API", "crypto": "비트코인 API"}.get(asset_type, asset_type)
@@ -262,7 +266,8 @@ async def refresh_single_asset(
 
     db.commit()
     db.refresh(asset)
-    return asset_to_out(asset)
+    out = asset_to_out(asset)
+    return AssetRefreshOut(**out.model_dump(), source=source)
 
 
 @app.post("/refresh", response_model=SummaryOut)
