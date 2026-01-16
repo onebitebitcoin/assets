@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Chart as ChartJS,
-  BarElement,
+  ArcElement,
   CategoryScale,
   Legend,
   LinearScale,
@@ -9,7 +9,7 @@ import {
   PointElement,
   Tooltip
 } from "chart.js";
-import { Bar, Line } from "react-chartjs-2";
+import { Doughnut, Line } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
 import {
   clearToken,
@@ -21,7 +21,7 @@ import {
 import { formatDelta, formatKRW, formatRelativeTime, formatUSD } from "../utils/format.js";
 
 ChartJS.register(
-  BarElement,
+  ArcElement,
   CategoryScale,
   Legend,
   LinearScale,
@@ -282,50 +282,30 @@ const Dashboard = () => {
   });
   allocationEntries.sort((a, b) => b.share - a.share);
   const allocationHasData = totalPortfolioValue > 0;
-  const allocationLabels = allocationEntries.map((entry) => `${entry.label} (${entry.share}%)`);
-  const allocationShares = allocationEntries.map((entry) => entry.share);
-  const allocationColors = allocationEntries.map((entry) => allocationColorMap[entry.label]);
+  const filteredAllocationEntries = allocationEntries.filter((entry) => entry.share > 0);
+  const allocationLabels = filteredAllocationEntries.map((entry) => entry.label);
+  const allocationShares = filteredAllocationEntries.map((entry) => entry.share);
+  const allocationColors = filteredAllocationEntries.map((entry) => allocationColorMap[entry.label]);
   const allocationData = {
     labels: allocationLabels,
     datasets: [
       {
-        label: "비중(%)",
         data: allocationShares,
         backgroundColor: allocationColors,
-        borderRadius: 8,
-        borderSkipped: false
+        borderColor: "#1e293b",
+        borderWidth: 2
       }
     ]
   };
   const allocationOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    cutout: "60%",
     plugins: {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (context) => `${context.parsed.y}%`
-        }
-      }
-    },
-    indexAxis: "y",
-    scales: {
-      x: {
-        ticks: {
-          color: "#94a3b8",
-          callback: (value) => `${value}%`
-        },
-        grid: {
-          color: "rgba(148, 163, 184, 0.1)"
-        },
-        suggestedMax: 100
-      },
-      y: {
-        ticks: {
-          color: "#cbd5f5"
-        },
-        grid: {
-          display: false
+          label: (context) => `${context.label}: ${context.parsed}%`
         }
       }
     }
@@ -492,11 +472,27 @@ const Dashboard = () => {
                 <h3>자산 비중</h3>
               </div>
             </div>
-            <div className="chart-canvas pie-canvas">
-              {allocationHasData ? (
-                <Bar data={allocationData} options={allocationOptions} />
-              ) : (
-                <p className="muted">데이터가 없습니다.</p>
+            <div className="pie-chart-container">
+              <div className="pie-chart-wrapper">
+                {allocationHasData ? (
+                  <Doughnut data={allocationData} options={allocationOptions} />
+                ) : (
+                  <p className="muted">데이터가 없습니다.</p>
+                )}
+              </div>
+              {allocationHasData && (
+                <ul className="pie-legend">
+                  {filteredAllocationEntries.map((entry) => (
+                    <li key={entry.label} className="pie-legend-item">
+                      <span
+                        className="pie-legend-color"
+                        style={{ backgroundColor: allocationColorMap[entry.label] }}
+                      />
+                      <span className="pie-legend-label">{entry.label}</span>
+                      <span className="pie-legend-value">{entry.share}%</span>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           </div>

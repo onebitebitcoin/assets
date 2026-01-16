@@ -221,8 +221,53 @@ button:disabled {
   gap: 1rem;
 }
 
-.pie-canvas {
-  height: 240px;
+.pie-chart-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.pie-chart-wrapper {
+  width: 180px;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pie-legend {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.pie-legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.pie-legend-label {
+  flex: 1;
+  color: #cbd5f5;
+}
+
+.pie-legend-value {
+  font-weight: 600;
+  color: #e2e8f0;
 }
 
 .chart-header {
@@ -818,8 +863,13 @@ button:disabled {
     justify-content: flex-start;
   }
 
-  .pie-canvas {
-    height: 320px;
+  .pie-chart-wrapper {
+    width: 160px;
+    height: 160px;
+  }
+
+  .pie-legend-item {
+    font-size: 0.85rem;
   }
 
   .chart-canvas {
