@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { IoGridOutline, IoLogOutOutline, IoAddOutline, IoRefreshOutline, IoCloseOutline } from "react-icons/io5";
+import { FiGrid, FiLogOut, FiPlus, FiRefreshCw, FiX } from "react-icons/fi";
 import {
   addAsset,
   clearToken,
@@ -292,7 +292,7 @@ const EditAssets = () => {
   return (
     <>
       <nav className="navbar">
-        <span className="navbar-title">My Daily Assets</span>
+        <span className="navbar-title">흙창고 현황</span>
         <div className="navbar-actions">
           <button
             className="icon-btn"
@@ -300,7 +300,7 @@ const EditAssets = () => {
             title="대시보드"
             type="button"
           >
-            <IoGridOutline />
+            <FiGrid />
           </button>
           <button
             className="icon-btn"
@@ -308,7 +308,7 @@ const EditAssets = () => {
             title="로그아웃"
             type="button"
           >
-            <IoLogOutOutline />
+            <FiLogOut />
           </button>
         </div>
       </nav>
@@ -338,7 +338,7 @@ const EditAssets = () => {
                   title="가격 업데이트"
                   type="button"
                 >
-                  <IoRefreshOutline className={refreshing ? "spinning" : ""} />
+                  <FiRefreshCw className={refreshing ? "spinning" : ""} />
                 </button>
                 <button
                   className="icon-btn"
@@ -347,7 +347,7 @@ const EditAssets = () => {
                   onClick={() => setAddOpen((prev) => !prev)}
                   title={addOpen ? "추가 닫기" : "자산 추가"}
                 >
-                  {addOpen ? <IoCloseOutline /> : <IoAddOutline />}
+                  {addOpen ? <FiX /> : <FiPlus />}
                 </button>
               </div>
             </div>
