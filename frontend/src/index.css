@@ -73,6 +73,14 @@ a:hover {
   transition: background 0.15s ease, color 0.15s ease;
 }
 
+.icon-btn svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+
 .icon-btn:hover {
   background: rgba(148, 163, 184, 0.25);
   color: #f8fafc;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { LayoutDashboard, LogOut } from "lucide-react";
 import {
   addAsset,
   clearToken,
@@ -287,22 +288,30 @@ const EditAssets = () => {
   };
 
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <div>
-          <p className="eyebrow">Manage Assets</p>
-          <h1>자산 관리</h1>
-          <p className="subtext">자산 수정 및 추가를 진행하세요.</p>
-        </div>
-        <div className="header-actions">
-          <button className="ghost" onClick={() => navigate("/dashboard")}> 
-            대시보드
+    <>
+      <nav className="navbar">
+        <span className="navbar-title">My Daily Assets</span>
+        <div className="navbar-actions">
+          <button
+            className="icon-btn"
+            onClick={() => navigate("/dashboard")}
+            title="대시보드"
+            type="button"
+          >
+            <LayoutDashboard size={20} />
           </button>
-          <button className="ghost" onClick={onLogout}>
-            로그아웃
+          <button
+            className="icon-btn"
+            onClick={onLogout}
+            title="로그아웃"
+            type="button"
+          >
+            <LogOut size={20} />
           </button>
         </div>
-      </header>
+      </nav>
+
+      <div className="dashboard">
 
       {error ? <p className="error">{error}</p> : null}
       {success ? <p className="success">{success}</p> : null}
@@ -670,7 +679,8 @@ const EditAssets = () => {
           )}
         </div>
       </section>
-    </div>
+      </div>
+    </>
   );
 };
 
