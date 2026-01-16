@@ -795,10 +795,13 @@ button:disabled {
 
   .header-actions {
     width: 100%;
+    justify-content: flex-start;
   }
 
   .header-actions button {
-    flex: 1;
+    flex: none;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.8rem;
   }
 
   .summary-card {
