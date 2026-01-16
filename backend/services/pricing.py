@@ -65,30 +65,83 @@ async def fetch_usd_krw_rate(client: httpx.AsyncClient) -> float:
     return rate
 
 
-async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> float:
-    cached = _get_cached(f"stock:{symbol}")
-    if cached is not None:
-        return cached
+async def _fetch_from_stooq(symbol: str, client: httpx.AsyncClient) -> float:
+    """Stooq API에서 미국주식 가격 조회"""
     url = "https://stooq.com/q/l/"
     stooq_symbol = f"{symbol.lower()}.us"
     params = {"s": stooq_symbol, "f": "sd2t2ohlcv", "h": "", "e": "csv"}
+    logger.debug("Fetching stock price from Stooq: %s", stooq_symbol)
     response = await client.get(url, params=params, timeout=10)
     response.raise_for_status()
     text = response.text.strip()
     lines = text.splitlines()
     if len(lines) < 2:
-        raise ValueError(f"No price data for {symbol}")
+        logger.warning("Stooq returned insufficient data for %s: %s", symbol, text[:200])
+        raise ValueError(f"No price data for {symbol} from Stooq")
     headers = [h.strip().lower() for h in lines[0].split(",")]
     values = [v.strip() for v in lines[1].split(",")]
     if len(headers) != len(values):
-        raise ValueError(f"Invalid price data for {symbol}")
+        logger.warning("Stooq header/value mismatch for %s", symbol)
+        raise ValueError(f"Invalid price data for {symbol} from Stooq")
     data = dict(zip(headers, values))
     close_value = data.get("close")
     if not close_value or close_value == "N/D":
-        raise ValueError(f"No price data for {symbol}")
+        logger.warning("Stooq returned N/D for %s", symbol)
+        raise ValueError(f"No price data for {symbol} from Stooq (N/D)")
     price = float(close_value)
-    _set_cache(f"stock:{symbol}", price)
+    logger.debug("Stooq price for %s: %.2f USD", symbol, price)
     return price
+
+
+async def _fetch_from_yahoo(symbol: str, client: httpx.AsyncClient) -> float:
+    """Yahoo Finance API에서 미국주식 가격 조회 (fallback)"""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    logger.debug("Fetching stock price from Yahoo Finance: %s", symbol)
+    response = await client.get(url, timeout=10)
+    response.raise_for_status()
+    data = response.json()
+
+    chart = data.get("chart", {})
+    result = chart.get("result")
+    if not result or len(result) == 0:
+        error = chart.get("error", {})
+        error_msg = error.get("description", "Unknown error")
+        logger.warning("Yahoo Finance returned no result for %s: %s", symbol, error_msg)
+        raise ValueError(f"No price data for {symbol} from Yahoo Finance: {error_msg}")
+
+    meta = result[0].get("meta", {})
+    price = meta.get("regularMarketPrice")
+    if price is None:
+        logger.warning("Yahoo Finance missing regularMarketPrice for %s", symbol)
+        raise ValueError(f"No price data for {symbol} from Yahoo Finance")
+
+    price = float(price)
+    logger.debug("Yahoo Finance price for %s: %.2f USD", symbol, price)
+    return price
+
+
+async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> float:
+    """미국주식 USD 가격 조회 (Stooq 1차, Yahoo Finance 2차)"""
+    cached = _get_cached(f"stock:{symbol}")
+    if cached is not None:
+        return cached
+
+    # 1차: Stooq API
+    try:
+        price = await _fetch_from_stooq(symbol, client)
+        _set_cache(f"stock:{symbol}", price)
+        return price
+    except Exception as exc:
+        logger.warning("Stooq failed for %s: %s, trying Yahoo Finance", symbol, exc)
+
+    # 2차: Yahoo Finance API (fallback)
+    try:
+        price = await _fetch_from_yahoo(symbol, client)
+        _set_cache(f"stock:{symbol}", price)
+        return price
+    except Exception as exc:
+        logger.error("Yahoo Finance also failed for %s: %s", symbol, exc)
+        raise ValueError(f"All price sources failed for {symbol}")
 
 
 async def fetch_btc_krw_price(client: httpx.AsyncClient) -> float:
