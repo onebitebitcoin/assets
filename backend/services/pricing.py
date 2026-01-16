@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # 자산 유형별 캐시 TTL (초)
 _CACHE_TTL_MAP = {
     "usdkrw": 3600,      # 환율: 1시간
-    "stock": 300,        # 미국주식: 5분
+    "stock": 0,          # 미국주식: 캐시 없음 (매번 조회)
     "kr_stock": 300,     # 한국주식: 5분
     "btc": 60,           # 비트코인: 1분
 }
