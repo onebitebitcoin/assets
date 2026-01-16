@@ -11,7 +11,7 @@ import {
 } from "chart.js";
 import { Doughnut, Line } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Plus, RefreshCw } from "lucide-react";
+import { IoLogOutOutline, IoAddOutline, IoRefreshOutline } from "react-icons/io5";
 import {
   clearToken,
   fetchSummary,
@@ -118,8 +118,10 @@ const Dashboard = () => {
 
 
   const onLogout = () => {
-    clearToken();
-    navigate("/login");
+    if (window.confirm("로그아웃 하시겠습니까?")) {
+      clearToken();
+      navigate("/login");
+    }
   };
 
   const onEditAssets = () => {
@@ -357,7 +359,7 @@ const Dashboard = () => {
             title="자산 추가"
             type="button"
           >
-            <Plus size={20} />
+            <IoAddOutline />
           </button>
           <button
             className="icon-btn"
@@ -365,7 +367,7 @@ const Dashboard = () => {
             title="로그아웃"
             type="button"
           >
-            <LogOut size={20} />
+            <IoLogOutOutline />
           </button>
         </div>
       </nav>
@@ -390,7 +392,7 @@ const Dashboard = () => {
                     title="가격 새로고침"
                     type="button"
                   >
-                    <RefreshCw size={18} className={refreshing ? "spinning" : ""} />
+                    <IoRefreshOutline className={refreshing ? "spinning" : ""} />
                   </button>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LayoutDashboard, LogOut } from "lucide-react";
+import { IoGridOutline, IoLogOutOutline, IoAddOutline, IoRefreshOutline, IoCloseOutline } from "react-icons/io5";
 import {
   addAsset,
   clearToken,
@@ -283,8 +283,10 @@ const EditAssets = () => {
   };
 
   const onLogout = () => {
-    clearToken();
-    navigate("/login");
+    if (window.confirm("로그아웃 하시겠습니까?")) {
+      clearToken();
+      navigate("/login");
+    }
   };
 
   return (
@@ -298,7 +300,7 @@ const EditAssets = () => {
             title="대시보드"
             type="button"
           >
-            <LayoutDashboard size={20} />
+            <IoGridOutline />
           </button>
           <button
             className="icon-btn"
@@ -306,7 +308,7 @@ const EditAssets = () => {
             title="로그아웃"
             type="button"
           >
-            <LogOut size={20} />
+            <IoLogOutOutline />
           </button>
         </div>
       </nav>
@@ -326,7 +328,29 @@ const EditAssets = () => {
       <section className="grid">
         <div className="panel full">
           <div className="panel-header">
-            <h3>보유 자산</h3>
+            <div className="panel-header-left">
+              <h3>보유 자산</h3>
+              <div className="panel-header-icons">
+                <button
+                  className="icon-btn"
+                  onClick={onRefresh}
+                  disabled={refreshing}
+                  title="가격 업데이트"
+                  type="button"
+                >
+                  <IoRefreshOutline className={refreshing ? "spinning" : ""} />
+                </button>
+                <button
+                  className="icon-btn"
+                  type="button"
+                  aria-expanded={addOpen}
+                  onClick={() => setAddOpen((prev) => !prev)}
+                  title={addOpen ? "추가 닫기" : "자산 추가"}
+                >
+                  {addOpen ? <IoCloseOutline /> : <IoAddOutline />}
+                </button>
+              </div>
+            </div>
             <div className="asset-panel-actions">
               <input
                 type="text"
@@ -335,9 +359,6 @@ const EditAssets = () => {
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="asset-search-input"
               />
-              <button className="ghost small" onClick={onRefresh} disabled={refreshing}>
-                {refreshing ? "업데이트 중" : "가격 업데이트"}
-              </button>
               <select
                 className="asset-sort-select"
                 value={sortMode}
@@ -346,14 +367,6 @@ const EditAssets = () => {
                 <option value="value">총금액순</option>
                 <option value="updated">최근 업데이트</option>
               </select>
-              <button
-                className="ghost small"
-                type="button"
-                aria-expanded={addOpen}
-                onClick={() => setAddOpen((prev) => !prev)}
-              >
-                {addOpen ? "추가 닫기" : "추가"}
-              </button>
             </div>
           </div>
           <div className="asset-add-panel">

@@ -67,23 +67,19 @@ a:hover {
   height: 36px;
   border: none;
   border-radius: 10px;
-  background: rgba(148, 163, 184, 0.1);
+  background: transparent;
   color: #e2e8f0;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: color 0.15s ease;
 }
 
 .icon-btn svg {
   width: 20px;
   height: 20px;
-  stroke: currentColor;
-  stroke-width: 2;
-  fill: none;
 }
 
 .icon-btn:hover {
-  background: rgba(148, 163, 184, 0.25);
-  color: #f8fafc;
+  color: #60a5fa;
 }
 
 .icon-btn:disabled {
@@ -492,6 +488,23 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.panel-header-left h3 {
+  margin: 0;
+}
+
+.panel-header-icons {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .asset-panel-actions {
