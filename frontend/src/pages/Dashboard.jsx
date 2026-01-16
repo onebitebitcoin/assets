@@ -37,6 +37,7 @@ const Dashboard = () => {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [period, setPeriod] = useState("daily");
   const [periodTotals, setPeriodTotals] = useState([]);
   const [tableColumns, setTableColumns] = useState([]);
@@ -71,11 +72,14 @@ const Dashboard = () => {
   const handleManualRefresh = async () => {
     setRefreshing(true);
     setError("");
+    setSuccess("");
     try {
       const data = await refreshSummary();
       setSummary(data);
       if (data.errors && data.errors.length > 0) {
         setError(data.errors.join(", "));
+      } else {
+        setSuccess("가격이 업데이트되었습니다.");
       }
     } catch (err) {
       setError(err.message);
@@ -418,6 +422,8 @@ const Dashboard = () => {
           <p className="error">{error}</p>
         </section>
       ) : null}
+
+      {success ? <p className="success">{success}</p> : null}
 
       <section className="chart-card combined-charts">
         <div className="charts-grid">
