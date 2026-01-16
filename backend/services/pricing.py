@@ -121,26 +121,26 @@ async def _fetch_from_yahoo(symbol: str, client: httpx.AsyncClient) -> float:
 
 
 async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> float:
-    """미국주식 USD 가격 조회 (Stooq 1차, Yahoo Finance 2차)"""
+    """미국주식 USD 가격 조회 (Yahoo Finance 1차, Stooq 2차)"""
     cached = _get_cached(f"stock:{symbol}")
     if cached is not None:
         return cached
 
-    # 1차: Stooq API
-    try:
-        price = await _fetch_from_stooq(symbol, client)
-        _set_cache(f"stock:{symbol}", price)
-        return price
-    except Exception as exc:
-        logger.warning("Stooq failed for %s: %s, trying Yahoo Finance", symbol, exc)
-
-    # 2차: Yahoo Finance API (fallback)
+    # 1차: Yahoo Finance API (실시간 가격)
     try:
         price = await _fetch_from_yahoo(symbol, client)
         _set_cache(f"stock:{symbol}", price)
         return price
     except Exception as exc:
-        logger.error("Yahoo Finance also failed for %s: %s", symbol, exc)
+        logger.warning("Yahoo Finance failed for %s: %s, trying Stooq", symbol, exc)
+
+    # 2차: Stooq API (fallback, 종가)
+    try:
+        price = await _fetch_from_stooq(symbol, client)
+        _set_cache(f"stock:{symbol}", price)
+        return price
+    except Exception as exc:
+        logger.error("Stooq also failed for %s: %s", symbol, exc)
         raise ValueError(f"All price sources failed for {symbol}")
 
 
@@ -192,7 +192,7 @@ async def get_price_krw(symbol: str, asset_type: str) -> PriceResult:
                 rate = await fetch_usd_krw_rate(client)
                 return PriceResult(
                     price_krw=usd_price * rate,
-                    source="stooq+exchangerate",
+                    source="yahoo+exchangerate",
                     price_usd=usd_price,
                 )
             except (httpx.HTTPError, ValueError) as exc:
