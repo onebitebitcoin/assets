@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { clearToken, listAssets } from "../api.js";
+import { clearToken, listAssets, refreshSummary } from "../api.js";
 import { formatKRW, formatUSD } from "../utils/format.js";
 
 const Settings = () => {
@@ -8,6 +8,8 @@ const Settings = () => {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadAssets = async () => {
     setLoading(true);
@@ -31,6 +33,31 @@ const Settings = () => {
   useEffect(() => {
     loadAssets();
   }, []);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setError("");
+    setSuccess("");
+    try {
+      const data = await refreshSummary();
+      const sorted = [...data.assets].sort((a, b) => {
+        const aValue = (a.last_price_krw || 0) * a.quantity;
+        const bValue = (b.last_price_krw || 0) * b.quantity;
+        if (bValue !== aValue) return bValue - aValue;
+        return a.name.localeCompare(b.name, "ko-KR");
+      });
+      setAssets(sorted);
+      if (data.errors && data.errors.length > 0) {
+        setError(data.errors.join(", "));
+      } else {
+        setSuccess("가격이 업데이트되었습니다.");
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const onLogout = () => {
     if (window.confirm("로그아웃 하시겠습니까?")) {
@@ -132,6 +159,7 @@ const Settings = () => {
 
       <div className="dashboard">
         {error && <p className="error">{error}</p>}
+        {success && <p className="success">{success}</p>}
 
         {/* 최근 업데이트된 자산 섹션 */}
         {!loading && recentlyUpdatedAssets.length > 0 && (
@@ -141,6 +169,15 @@ const Settings = () => {
                 <h3>최근 업데이트된 자산</h3>
                 <p className="subtext">24시간 이내 가격이 갱신된 자산 ({recentlyUpdatedAssets.length}개)</p>
               </div>
+              <button
+                className="icon-btn"
+                onClick={onRefresh}
+                disabled={refreshing}
+                title="가격 새로고침"
+                type="button"
+              >
+                <i className={`fa-solid fa-arrows-rotate${refreshing ? " spinning" : ""}`} />
+              </button>
             </div>
             <div className="recent-updates-list">
               {recentlyUpdatedAssets.map((asset) => (
