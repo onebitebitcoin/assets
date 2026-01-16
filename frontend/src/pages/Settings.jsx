@@ -67,14 +67,36 @@ const Settings = () => {
     return typeMap[type?.toLowerCase()] || type || "직접입력";
   };
 
+  const parseDate = (value) => {
+    if (!value) return null;
+    const raw = typeof value === "string" ? value : value.toString();
+    const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
+    const date = new Date(hasTimezone ? raw : `${raw}+09:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
   const lastUpdatedTimes = assets
     .map((a) => a.last_updated)
     .filter(Boolean)
-    .map((t) => new Date(t).getTime())
-    .filter((t) => !Number.isNaN(t));
+    .map((t) => parseDate(t)?.getTime())
+    .filter((t) => t && !Number.isNaN(t));
   const latestUpdate = lastUpdatedTimes.length
     ? new Date(Math.max(...lastUpdatedTimes))
     : null;
+
+  // 최근 업데이트된 자산 (24시간 이내)
+  const now = new Date();
+  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const recentlyUpdatedAssets = assets
+    .filter((a) => {
+      const updated = parseDate(a.last_updated);
+      return updated && updated > twentyFourHoursAgo;
+    })
+    .sort((a, b) => {
+      const aTime = parseDate(a.last_updated)?.getTime() || 0;
+      const bTime = parseDate(b.last_updated)?.getTime() || 0;
+      return bTime - aTime; // 최신순
+    });
 
   return (
     <>
@@ -111,10 +133,45 @@ const Settings = () => {
       <div className="dashboard">
         {error && <p className="error">{error}</p>}
 
+        {/* 최근 업데이트된 자산 섹션 */}
+        {!loading && recentlyUpdatedAssets.length > 0 && (
+          <section className="panel recent-updates-panel">
+            <div className="panel-header">
+              <div>
+                <h3>최근 업데이트된 자산</h3>
+                <p className="subtext">24시간 이내 가격이 갱신된 자산 ({recentlyUpdatedAssets.length}개)</p>
+              </div>
+            </div>
+            <div className="recent-updates-list">
+              {recentlyUpdatedAssets.map((asset) => (
+                <div key={asset.id} className="recent-update-item">
+                  <div className="recent-update-info">
+                    <span className="recent-update-name">
+                      {asset.name} <span className="muted">({asset.symbol})</span>
+                    </span>
+                    <span className="recent-update-type">{getAssetTypeName(asset.asset_type)}</span>
+                  </div>
+                  <div className="recent-update-prices">
+                    {asset.last_price_usd && (
+                      <span className="recent-update-usd">{formatUSD(asset.last_price_usd)}</span>
+                    )}
+                    <span className="recent-update-krw">
+                      {asset.last_price_krw ? formatKRW(asset.last_price_krw) : "-"}
+                    </span>
+                  </div>
+                  <div className="recent-update-time">
+                    {formatUpdatedAt(asset.last_updated)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h3>DB 저장 가격 현황</h3>
+              <h3>전체 자산 가격 현황</h3>
               <p className="subtext">
                 {latestUpdate
                   ? `마지막 업데이트: ${formatUpdatedAt(latestUpdate)}`

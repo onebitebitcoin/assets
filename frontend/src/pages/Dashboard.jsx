@@ -202,6 +202,28 @@ const Dashboard = () => {
     const symbol = asset.symbol?.toLowerCase() || "";
     return name.includes(query) || symbol.includes(query);
   });
+  // 타임존 정보가 없으면 한국 시간으로 해석
+  const parseDate = (value) => {
+    if (!value) return null;
+    const raw = typeof value === "string" ? value : value.toString();
+    const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
+    const date = new Date(hasTimezone ? raw : `${raw}+09:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  // 자산들의 last_updated 중 최신 값 계산
+  const assetLastUpdatedTimes = summary.assets
+    .map((a) => a.last_updated)
+    .filter(Boolean)
+    .map((t) => parseDate(t)?.getTime())
+    .filter((t) => t && !Number.isNaN(t));
+  const latestAssetUpdate = assetLastUpdatedTimes.length
+    ? new Date(Math.max(...assetLastUpdatedTimes))
+    : null;
+
+  // last_refreshed가 없으면 자산들의 최신 업데이트 시간 사용
+  const effectiveLastRefreshed = summary.last_refreshed || (latestAssetUpdate ? latestAssetUpdate.toISOString() : null);
+
   const formatAxisDate = (value) => {
     if (!value) return "-";
     const date = new Date(value);
@@ -409,9 +431,9 @@ const Dashboard = () => {
                   {formatDelta(summary.daily_change_krw)}
                 </h3>
               </div>
-              {summary.last_refreshed ? (
+              {effectiveLastRefreshed ? (
                 <p className="refresh-info muted">
-                  {formatRelativeTime(summary.last_refreshed)}에 업데이트됨
+                  {formatRelativeTime(effectiveLastRefreshed)}에 업데이트됨
                   {summary.next_refresh_at && ` · 다음 갱신: ${formatRelativeTime(summary.next_refresh_at)}`}
                 </p>
               ) : (

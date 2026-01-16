@@ -1131,3 +1131,85 @@ button:disabled {
   border-top: 1px solid rgba(148, 163, 184, 0.1);
   font-size: 0.8rem;
 }
+
+/* 최근 업데이트 섹션 */
+.recent-updates-panel {
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.recent-updates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.recent-update-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.recent-update-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 200px;
+}
+
+.recent-update-name {
+  font-weight: 500;
+}
+
+.recent-update-type {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+}
+
+.recent-update-prices {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.recent-update-usd {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.recent-update-krw {
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.recent-update-time {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  min-width: 140px;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .recent-update-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .recent-update-info {
+    min-width: auto;
+  }
+
+  .recent-update-time {
+    text-align: left;
+  }
+}
