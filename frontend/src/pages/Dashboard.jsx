@@ -153,9 +153,16 @@ const Dashboard = () => {
   const onSnapshot = async () => {
     setSnapshotLoading(true);
     setError("");
+    setSuccess("");
     try {
+      // 1. 먼저 가격 갱신
+      const refreshedData = await refreshSummary();
+      setSummary(refreshedData);
+
+      // 2. 그 다음 스냅샷 저장
       await snapshotTotals();
       await loadTotals(0, false, period);
+      setSuccess("가격 갱신 후 스냅샷이 저장되었습니다.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -407,10 +414,14 @@ const Dashboard = () => {
                 <span>가격 갱신 중...</span>
               </div>
             )}
-            {summary.last_refreshed && (
+            {summary.last_refreshed ? (
               <p className="refresh-info muted">
                 {formatRelativeTime(summary.last_refreshed)}에 업데이트됨
                 {summary.next_refresh_at && ` · 다음 갱신: ${formatRelativeTime(summary.next_refresh_at)}`}
+              </p>
+            ) : (
+              <p className="refresh-info muted">
+                아직 가격이 갱신되지 않았습니다
               </p>
             )}
           </>
