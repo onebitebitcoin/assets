@@ -287,14 +287,17 @@ async def get_price_krw_batch(assets: list[tuple[str, str]]) -> dict[str, PriceR
             other_assets.append((symbol, asset_type))
 
     async with httpx.AsyncClient() as client:
-        # 1. 미국 주식: 병렬 조회
-        if us_stock_symbols:
-            # 환율 먼저 조회
+        # 환율 먼저 조회 (미국 주식 또는 암호화폐가 있는 경우)
+        rate = None
+        needs_rate = us_stock_symbols or any(at == "crypto" for _, at in other_assets)
+        if needs_rate:
             try:
                 rate = await fetch_usd_krw_rate(client)
             except Exception as exc:
                 logger.error("Failed to fetch USD/KRW rate: %s", exc)
-                rate = None
+
+        # 1. 미국 주식: 병렬 조회
+        if us_stock_symbols and rate:
 
             if rate:
                 async def fetch_single_stock(symbol: str) -> tuple[str, Optional[PriceResult]]:
@@ -333,7 +336,8 @@ async def get_price_krw_batch(assets: list[tuple[str, str]]) -> dict[str, PriceR
                     return symbol, PriceResult(price_krw=krw_price, source="pykrx")
                 elif asset_type == "crypto" and symbol.upper() == "BTC":
                     btc_price = await fetch_btc_krw_price(client)
-                    return symbol, PriceResult(price_krw=btc_price, source="upbit")
+                    price_usd = btc_price / rate if rate else None
+                    return symbol, PriceResult(price_krw=btc_price, source="upbit", price_usd=price_usd)
                 else:
                     return symbol, None
             except Exception as exc:
@@ -404,9 +408,9 @@ async def get_snapshot_prices(assets: list[tuple[str, str]]) -> dict[str, Snapsh
                 logger.warning("[Snapshot] KR stock previous close failed for %s: %s", symbol, exc)
                 return symbol, None
 
-        # 2. 미국 주식: 장 열림 여부에 따라 현재 가격 또는 마지막 종가
+        # 2. 미국 주식 또는 암호화폐가 있으면 환율 조회
         rate: Optional[float] = None
-        if us_stock_symbols:
+        if us_stock_symbols or crypto_symbols:
             try:
                 rate = await fetch_usd_krw_rate(client)
             except Exception as exc:
@@ -440,9 +444,11 @@ async def get_snapshot_prices(assets: list[tuple[str, str]]) -> dict[str, Snapsh
             try:
                 if symbol.upper() == "BTC":
                     price = await fetch_btc_krw_price(client)
+                    price_usd = price / rate if rate else None
                     return symbol, SnapshotPriceResult(
                         price_krw=price,
                         source="upbit",
+                        price_usd=price_usd,
                         note="실시간",
                     )
                 return symbol, None
