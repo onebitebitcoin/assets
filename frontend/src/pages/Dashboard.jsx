@@ -51,7 +51,7 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [cardHistoryOpen, setCardHistoryOpen] = useState({});
   const [editingAssetId, setEditingAssetId] = useState(null);
-  const [editForm, setEditForm] = useState({ name: "", quantity: "" });
+  const [editForm, setEditForm] = useState({ name: "", symbol: "", quantity: "" });
   const [addingNew, setAddingNew] = useState(false);
   const [newAssetForm, setNewAssetForm] = useState({
     name: "", symbol: "", asset_type: "stock", quantity: 1, custom_type: "", price_krw: ""
@@ -149,18 +149,22 @@ const Dashboard = () => {
   // 인라인 편집 핸들러
   const startEdit = (asset) => {
     setEditingAssetId(asset.id);
-    setEditForm({ name: asset.name, quantity: String(asset.quantity) });
+    setEditForm({ name: asset.name, symbol: asset.symbol || "", quantity: String(asset.quantity) });
   };
 
   const cancelEdit = () => {
     setEditingAssetId(null);
-    setEditForm({ name: "", quantity: "" });
+    setEditForm({ name: "", symbol: "", quantity: "" });
   };
 
   const saveEdit = async (assetId) => {
     const quantity = Number(editForm.quantity);
     if (!editForm.name.trim()) {
       setError("이름을 입력해주세요.");
+      return;
+    }
+    if (!editForm.symbol.trim()) {
+      setError("티커를 입력해주세요.");
       return;
     }
     if (!Number.isInteger(quantity) || quantity <= 0) {
@@ -174,11 +178,11 @@ const Dashboard = () => {
     setSummary((prev) => ({
       ...prev,
       assets: prev.assets.map((a) =>
-        a.id === assetId ? { ...a, name: editForm.name.trim(), quantity } : a
+        a.id === assetId ? { ...a, name: editForm.name.trim(), symbol: editForm.symbol.trim(), quantity } : a
       )
     }));
     try {
-      await updateAsset(assetId, { name: editForm.name.trim(), quantity });
+      await updateAsset(assetId, { name: editForm.name.trim(), symbol: editForm.symbol.trim(), quantity });
       setSuccess("저장되었습니다.");
       cancelEdit();
     } catch (err) {
@@ -811,12 +815,23 @@ const Dashboard = () => {
                       <tr key={asset.id}>
                         <td className="asset-name-col">
                           {isEditing ? (
-                            <input
-                              type="text"
-                              className="asset-edit-input"
-                              value={editForm.name}
-                              onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
-                            />
+                            <div className="asset-edit-name-group">
+                              <input
+                                type="text"
+                                className="asset-edit-input"
+                                value={editForm.name}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                                placeholder="이름"
+                              />
+                              <input
+                                type="text"
+                                className="asset-edit-input asset-edit-input-small"
+                                value={editForm.symbol}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, symbol: e.target.value }))}
+                                placeholder="티커"
+                                style={{ marginTop: "0.3rem" }}
+                              />
+                            </div>
                           ) : (
                             <>
                               {asset.name} <span className="muted">({asset.symbol})</span>
@@ -1047,8 +1062,20 @@ const Dashboard = () => {
                               className="asset-edit-input"
                               value={editForm.name}
                               onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                              placeholder="이름"
                               style={{ marginBottom: "0.5rem" }}
                             />
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                              <span className="muted">티커:</span>
+                              <input
+                                type="text"
+                                className="asset-edit-input"
+                                style={{ width: "100px" }}
+                                value={editForm.symbol}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, symbol: e.target.value }))}
+                                placeholder="AAPL"
+                              />
+                            </div>
                             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                               <span className="muted">수량:</span>
                               <input
