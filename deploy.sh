@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_PORT=50001
 BACKEND_PORT=50000
+BACKEND_WARMUP_PORT=50002
 if [[ "$#" -gt 0 ]]; then
   echo "Unknown option: $*" >&2
   echo "Usage: ./deploy.sh" >&2
@@ -69,15 +70,18 @@ require_cmd npm
 
 cd "${ROOT_DIR}"
 
+# 프론트엔드는 먼저 종료
 if port_in_use "${FRONTEND_PORT}"; then
   kill_port "${FRONTEND_PORT}"
 fi
-if port_in_use "${BACKEND_PORT}"; then
-  kill_port "${BACKEND_PORT}"
-fi
-if port_in_use "${FRONTEND_PORT}" || port_in_use "${BACKEND_PORT}"; then
-  echo "Ports are still in use. Stop the services or choose different ports." >&2
+if port_in_use "${FRONTEND_PORT}"; then
+  echo "Frontend port ${FRONTEND_PORT} is still in use." >&2
   exit 1
+fi
+
+# 백엔드 warmup 포트 정리
+if port_in_use "${BACKEND_WARMUP_PORT}"; then
+  kill_port "${BACKEND_WARMUP_PORT}"
 fi
 
 echo "Setting up Python venv and backend deps..."
@@ -100,12 +104,46 @@ mkdir -p "${LOG_DIR}"
 PID_DIR="${ROOT_DIR}/pids"
 mkdir -p "${PID_DIR}"
 
+# Graceful restart: 새 백엔드를 임시 포트에서 먼저 예열
+echo "Warming up new backend on port ${BACKEND_WARMUP_PORT}..."
+nohup "${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${BACKEND_WARMUP_PORT}" > /dev/null 2>&1 &
+WARMUP_PID=$!
+disown "${WARMUP_PID}"
+
+# 예열 백엔드 헬스 체크 대기
+warmup_ready=false
+for i in {1..30}; do
+  if curl -s "http://127.0.0.1:${BACKEND_WARMUP_PORT}/health" >/dev/null 2>&1; then
+    warmup_ready=true
+    echo "Warmup backend is ready! (${i}s)"
+    break
+  fi
+  sleep 1
+done
+
+if [[ "${warmup_ready}" != "true" ]]; then
+  echo "WARNING: Warmup backend failed to start, proceeding anyway..."
+  kill "${WARMUP_PID}" 2>/dev/null || true
+fi
+
+# 이제 기존 백엔드 종료 (예열이 완료되었으므로 새 시작이 빠름)
+if port_in_use "${BACKEND_PORT}"; then
+  echo "Stopping old backend on port ${BACKEND_PORT}..."
+  kill_port "${BACKEND_PORT}"
+fi
+
+# 새 백엔드를 원래 포트에서 시작
 echo "Starting backend on ${BACKEND_PORT}..."
 nohup "${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${BACKEND_PORT}" > "${ROOT_DIR}/backend/debug.log" 2>&1 &
 BACKEND_PID=$!
 echo "${BACKEND_PID}" > "${PID_DIR}/backend.pid"
 disown "${BACKEND_PID}"
 echo "Backend started with PID ${BACKEND_PID} (detached)"
+
+# 예열 백엔드 종료
+if [[ -n "${WARMUP_PID:-}" ]]; then
+  kill "${WARMUP_PID}" 2>/dev/null || true
+fi
 
 echo "Starting frontend on ${FRONTEND_PORT}..."
 VITE_API_BASE="${VITE_API_BASE:-https://ubuntu.golden-ghost.ts.net:8443/api}" \
