@@ -104,46 +104,64 @@ mkdir -p "${LOG_DIR}"
 PID_DIR="${ROOT_DIR}/pids"
 mkdir -p "${PID_DIR}"
 
-# Graceful restart: 새 백엔드를 임시 포트에서 먼저 예열
-echo "Warming up new backend on port ${BACKEND_WARMUP_PORT}..."
-nohup "${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${BACKEND_WARMUP_PORT}" > /dev/null 2>&1 &
-WARMUP_PID=$!
-disown "${WARMUP_PID}"
+# Zero-downtime deployment: 포트를 번갈아 사용
+# 현재 사용 중인 포트 확인
+CURRENT_PORT=""
+NEW_PORT=""
+if port_in_use "${BACKEND_PORT}"; then
+  CURRENT_PORT="${BACKEND_PORT}"
+  NEW_PORT="${BACKEND_WARMUP_PORT}"
+elif port_in_use "${BACKEND_WARMUP_PORT}"; then
+  CURRENT_PORT="${BACKEND_WARMUP_PORT}"
+  NEW_PORT="${BACKEND_PORT}"
+else
+  # 둘 다 사용 안 함 - 기본 포트 사용
+  CURRENT_PORT=""
+  NEW_PORT="${BACKEND_PORT}"
+fi
 
-# 예열 백엔드 헬스 체크 대기
-warmup_ready=false
-for i in {1..30}; do
-  if curl -s "http://127.0.0.1:${BACKEND_WARMUP_PORT}/health" >/dev/null 2>&1; then
-    warmup_ready=true
-    echo "Warmup backend is ready! (${i}s)"
+echo "Current backend port: ${CURRENT_PORT:-none}"
+echo "New backend port: ${NEW_PORT}"
+
+# 새 백엔드 시작
+echo "Starting new backend on port ${NEW_PORT}..."
+nohup "${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${NEW_PORT}" > "${ROOT_DIR}/backend/debug.log" 2>&1 &
+BACKEND_PID=$!
+disown "${BACKEND_PID}"
+
+# 새 백엔드 헬스 체크 대기
+new_backend_ready=false
+for i in {1..60}; do
+  if curl -s "http://127.0.0.1:${NEW_PORT}/health" >/dev/null 2>&1; then
+    new_backend_ready=true
+    echo "New backend is ready! (${i}s)"
     break
   fi
   sleep 1
 done
 
-if [[ "${warmup_ready}" != "true" ]]; then
-  echo "WARNING: Warmup backend failed to start, proceeding anyway..."
-  kill "${WARMUP_PID}" 2>/dev/null || true
+if [[ "${new_backend_ready}" != "true" ]]; then
+  echo "ERROR: New backend failed to start" >&2
+  kill "${BACKEND_PID}" 2>/dev/null || true
+  exit 1
 fi
 
-# 이제 기존 백엔드 종료 (예열이 완료되었으므로 새 시작이 빠름)
-if port_in_use "${BACKEND_PORT}"; then
-  echo "Stopping old backend on port ${BACKEND_PORT}..."
-  kill_port "${BACKEND_PORT}"
+# Tailscale serve 경로를 새 백엔드로 전환 (zero-downtime)
+echo "Switching Tailscale serve to port ${NEW_PORT}..."
+if command -v tailscale >/dev/null 2>&1; then
+  tailscale serve --https=8443 --bg --set-path="/api" "localhost:${NEW_PORT}" 2>/dev/null || true
 fi
 
-# 새 백엔드를 원래 포트에서 시작
-echo "Starting backend on ${BACKEND_PORT}..."
-nohup "${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${BACKEND_PORT}" > "${ROOT_DIR}/backend/debug.log" 2>&1 &
-BACKEND_PID=$!
+# 기존 백엔드 종료
+if [[ -n "${CURRENT_PORT}" ]] && port_in_use "${CURRENT_PORT}"; then
+  echo "Stopping old backend on port ${CURRENT_PORT}..."
+  kill_port "${CURRENT_PORT}"
+fi
+
+# PID 저장
 echo "${BACKEND_PID}" > "${PID_DIR}/backend.pid"
-disown "${BACKEND_PID}"
-echo "Backend started with PID ${BACKEND_PID} (detached)"
-
-# 예열 백엔드 종료
-if [[ -n "${WARMUP_PID:-}" ]]; then
-  kill "${WARMUP_PID}" 2>/dev/null || true
-fi
+echo "${NEW_PORT}" > "${PID_DIR}/backend.port"
+echo "Backend started with PID ${BACKEND_PID} on port ${NEW_PORT}"
 
 echo "Starting frontend on ${FRONTEND_PORT}..."
 VITE_API_BASE="${VITE_API_BASE:-https://ubuntu.golden-ghost.ts.net:8443/api}" \
@@ -153,24 +171,12 @@ echo "${FRONTEND_PID}" > "${PID_DIR}/frontend.pid"
 disown "${FRONTEND_PID}"
 echo "Frontend started with PID ${FRONTEND_PID} (detached)"
 
-echo "Waiting for services to be ready..."
+echo "Waiting for frontend to be ready..."
 for i in {1..30}; do
-  backend_ready=false
-  frontend_ready=false
-
-  if curl -s http://127.0.0.1:${BACKEND_PORT}/health >/dev/null 2>&1 || curl -s http://127.0.0.1:${BACKEND_PORT} >/dev/null 2>&1; then
-    backend_ready=true
-  fi
-
   if curl -s http://127.0.0.1:${FRONTEND_PORT} >/dev/null 2>&1; then
-    frontend_ready=true
-  fi
-
-  if [[ "${backend_ready}" == "true" ]] && [[ "${frontend_ready}" == "true" ]]; then
-    echo "Both services are ready!"
+    echo "Frontend is ready! (${i}s)"
     break
   fi
-
   sleep 1
 done
 
@@ -182,8 +188,8 @@ echo ""
 echo "Services are running in the background and will persist even if SSH disconnects."
 echo ""
 echo "Service PIDs:"
-echo "  Backend:  ${BACKEND_PID} (saved in ${PID_DIR}/backend.pid)"
-echo "  Frontend: ${FRONTEND_PID} (saved in ${PID_DIR}/frontend.pid)"
+echo "  Backend:  ${BACKEND_PID} on port ${NEW_PORT} (saved in ${PID_DIR}/backend.pid)"
+echo "  Frontend: ${FRONTEND_PID} on port ${FRONTEND_PORT} (saved in ${PID_DIR}/frontend.pid)"
 echo ""
 echo "Logs:"
 echo "  Backend:  ${ROOT_DIR}/backend/debug.log"
@@ -191,9 +197,6 @@ echo "  Frontend: ${ROOT_DIR}/frontend/debug.log"
 echo ""
 echo "To stop services, run:"
 echo "  kill \$(cat ${PID_DIR}/backend.pid ${PID_DIR}/frontend.pid)"
-echo ""
-echo "Tailscale serve is not configured by this script."
-echo "Run: sudo ./tailscale.sh [--reset]"
 echo ""
 echo "To view logs:"
 echo "  tail -f ${ROOT_DIR}/backend/debug.log"
