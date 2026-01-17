@@ -11,7 +11,6 @@ import {
 } from "chart.js";
 import { Doughnut, Line } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
-import { Pencil, Plus, Check, X, Trash2 } from "lucide-react";
 import {
   addAsset,
   clearToken,
@@ -770,7 +769,7 @@ const Dashboard = () => {
                           disabled={saving}
                           title="추가"
                         >
-                          <Check size={16} />
+                          <i className="fa-solid fa-check" />
                         </button>
                         <button
                           className="icon-btn small"
@@ -781,7 +780,7 @@ const Dashboard = () => {
                           }}
                           title="취소"
                         >
-                          <X size={16} />
+                          <i className="fa-solid fa-xmark" />
                         </button>
                       </td>
                       {periodTotals.map((row, index) => (
@@ -856,7 +855,7 @@ const Dashboard = () => {
                                 disabled={saving}
                                 title="저장"
                               >
-                                <Check size={16} />
+                                <i className="fa-solid fa-check" />
                               </button>
                               <button
                                 className="icon-btn small"
@@ -864,7 +863,7 @@ const Dashboard = () => {
                                 onClick={cancelEdit}
                                 title="취소"
                               >
-                                <X size={16} />
+                                <i className="fa-solid fa-xmark" />
                               </button>
                             </>
                           ) : (
@@ -875,7 +874,7 @@ const Dashboard = () => {
                                 onClick={() => startEdit(meta || asset)}
                                 title="편집"
                               >
-                                <Pencil size={16} />
+                                <i className="fa-solid fa-pencil" />
                               </button>
                               <button
                                 className="icon-btn small"
@@ -883,7 +882,7 @@ const Dashboard = () => {
                                 onClick={() => handleDelete(asset.id, asset.name)}
                                 title="삭제"
                               >
-                                <Trash2 size={16} />
+                                <i className="fa-solid fa-trash" />
                               </button>
                             </>
                           )}
@@ -1090,7 +1089,7 @@ const Dashboard = () => {
                               disabled={saving}
                               title="저장"
                             >
-                              <Check size={16} />
+                              <i className="fa-solid fa-check" />
                             </button>
                             <button
                               className="icon-btn small"
@@ -1098,7 +1097,7 @@ const Dashboard = () => {
                               onClick={cancelEdit}
                               title="취소"
                             >
-                              <X size={16} />
+                              <i className="fa-solid fa-xmark" />
                             </button>
                           </>
                         ) : (
@@ -1109,7 +1108,7 @@ const Dashboard = () => {
                               onClick={() => startEdit(meta)}
                               title="편집"
                             >
-                              <Pencil size={16} />
+                              <i className="fa-solid fa-pencil" />
                             </button>
                             <button
                               className="icon-btn small"
@@ -1117,7 +1116,7 @@ const Dashboard = () => {
                               onClick={() => handleDelete(asset.id, asset.name)}
                               title="삭제"
                             >
-                              <Trash2 size={16} />
+                              <i className="fa-solid fa-trash" />
                             </button>
                           </>
                         )}
