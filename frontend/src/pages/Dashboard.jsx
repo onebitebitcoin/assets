@@ -553,7 +553,12 @@ const Dashboard = () => {
         <div className="panel-header">
           <div>
             <h3>자산 변화</h3>
-            <p className="subtext">자산 추가 및 수정이 반영되지 않았으면 스냅샷 버튼을 클릭하세요.</p>
+            <p className="subtext">
+              자산 추가 및 수정이 반영되지 않았으면 스냅샷 버튼을 클릭하세요.
+              {periodTotals.length > 0 && (
+                <span className="last-snapshot-time"> (최근 스냅샷: {periodTotals[0].period_start})</span>
+              )}
+            </p>
           </div>
           <input
             type="text"

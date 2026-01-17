@@ -153,6 +153,11 @@ a:hover {
   margin: 0;
 }
 
+.last-snapshot-time {
+  color: #64748b;
+  font-size: 0.85em;
+}
+
 .auth-form,
 .asset-form {
   display: grid;
