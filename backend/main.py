@@ -67,6 +67,8 @@ def ensure_assets_columns():
         columns = [row[1] for row in conn.execute(text("PRAGMA table_info(assets)"))]
         if "last_price_usd" not in columns:
             conn.execute(text("ALTER TABLE assets ADD COLUMN last_price_usd FLOAT"))
+        if "last_source" not in columns:
+            conn.execute(text("ALTER TABLE assets ADD COLUMN last_source VARCHAR(50)"))
 
 
 ensure_assets_columns()
