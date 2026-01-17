@@ -15,3 +15,4 @@ pids/
 # Asset import intermediate files
 assets_raw.json
 assets_api.json
+backend/.env
