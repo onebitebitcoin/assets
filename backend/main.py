@@ -50,7 +50,7 @@ from .schemas import (
     TotalPointDetailOut,
     TotalsDetailOut,
 )
-from .services.pricing import get_price_krw, get_price_krw_batch
+from .services.pricing import get_price_krw, get_price_krw_batch, get_snapshot_prices
 SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 
@@ -483,17 +483,72 @@ def get_weekly_totals(
 
 
 @app.post("/totals/snapshot", response_model=TotalPointOut)
-def snapshot_totals(
+async def snapshot_totals(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    asset_totals = compute_asset_totals(user.id, db)
-    total = sum(total for _, total in asset_totals)
+    """스냅샷 저장 (자산 유형별 시간대 로직 적용)
+
+    - 한국 주식 (kr_stock): 한국 시간 기준 전일 종가
+    - 비트코인 (crypto): 현재 가격 (24시간 거래)
+    - 미국 주식 (stock): 장이 열려있으면 현재 가격, 닫혀있으면 마지막 종가
+    """
+    assets = db.scalars(select(Asset).where(Asset.user_id == user.id)).all()
     today = today_seoul()
+    total = 0.0
+    asset_totals: list[tuple[Asset, float]] = []
+
+    # 외부 API 호출이 필요한 자산과 아닌 자산 분류
+    fetch_targets: list[tuple[Asset, str, str]] = []  # (asset, symbol, asset_type)
+    for asset in assets:
+        asset_type = asset.asset_type.lower()
+        if asset_type not in {"stock", "crypto", "kr_stock"}:
+            # 직접입력 자산: 외부 API 호출 불필요
+            if asset.last_price_krw is None:
+                asset.last_price_krw = 0.0
+            asset_value = asset.last_price_krw * asset.quantity
+            total += asset_value
+            asset_totals.append((asset, asset_value))
+        else:
+            fetch_targets.append((asset, asset.symbol, asset_type))
+
+    # 스냅샷용 가격 조회 (시간대별 로직 적용)
+    if fetch_targets:
+        batch_input = [(symbol, asset_type) for _, symbol, asset_type in fetch_targets]
+        price_results = await get_snapshot_prices(batch_input)
+
+        now = now_seoul()
+        for asset, symbol, asset_type in fetch_targets:
+            price = price_results.get(symbol)
+            if price:
+                asset.last_price_krw = price.price_krw
+                asset.last_price_usd = price.price_usd
+                asset.last_updated = now
+                asset.last_source = price.source
+                asset_value = price.price_krw * asset.quantity
+                total += asset_value
+                asset_totals.append((asset, asset_value))
+                logger.info(
+                    "[Snapshot] %s: %.0f KRW (%s)",
+                    symbol, price.price_krw, price.note
+                )
+            else:
+                # 가격 조회 실패 시 기존 가격 사용
+                if asset.last_price_krw is not None:
+                    asset_value = asset.last_price_krw * asset.quantity
+                    total += asset_value
+                    asset_totals.append((asset, asset_value))
+                else:
+                    asset_totals.append((asset, 0.0))
+                logger.warning("[Snapshot] Price fetch failed for %s, using existing price", symbol)
+
+    # 스냅샷 저장
     upsert_daily_total(db, user.id, total, today)
     for asset, total_krw in asset_totals:
         upsert_daily_asset_total(db, user.id, asset.id, total_krw, today)
     db.commit()
+
+    logger.info("[Snapshot] Saved for user %d: %.0f KRW on %s", user.id, total, today)
     return TotalPointOut(period_start=today, period_end=today, total_krw=total)
 
 
