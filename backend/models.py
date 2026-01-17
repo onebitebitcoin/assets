@@ -30,6 +30,7 @@ class Asset(Base):
     last_price_krw: Mapped[Optional[float]] = mapped_column(Float, default=None)
     last_price_usd: Mapped[Optional[float]] = mapped_column(Float, default=None)
     last_updated: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    last_source: Mapped[Optional[str]] = mapped_column(String(50), default=None)
 
     user: Mapped[User] = relationship(back_populates="assets")
 

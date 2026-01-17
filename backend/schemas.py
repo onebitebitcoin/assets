@@ -44,10 +44,11 @@ class AssetOut(BaseModel):
     last_price_usd: Optional[float]
     last_updated: Optional[datetime]
     value_krw: Optional[float]
+    source: Optional[str] = None
 
 
 class AssetRefreshOut(AssetOut):
-    source: Optional[str] = None
+    pass
 
 
 class SummaryOut(BaseModel):

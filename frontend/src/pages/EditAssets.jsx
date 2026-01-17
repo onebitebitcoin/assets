@@ -615,7 +615,10 @@ const EditAssets = () => {
                           ) : (
                             <p className="asset-meta">직접 입력 자산</p>
                           )}
-                          <p className="asset-meta">업데이트: {formatUpdatedAt(asset.last_updated)}</p>
+                          <p className="asset-meta">
+                            업데이트: {formatUpdatedAt(asset.last_updated)}
+                            {asset.source && <span className="source-badge muted"> · {asset.source}</span>}
+                          </p>
                         </div>
                         <div className="asset-edit-actions">
                           <button
