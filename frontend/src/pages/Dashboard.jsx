@@ -56,6 +56,7 @@ const Dashboard = () => {
     name: "", symbol: "", asset_type: "stock", quantity: 1, custom_type: "", price_krw: ""
   });
   const [saving, setSaving] = useState(false);
+  const [showSmallAssets, setShowSmallAssets] = useState(false);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -302,13 +303,25 @@ const Dashboard = () => {
     }
     return a.name.localeCompare(b.name, "ko-KR");
   });
+  const SMALL_ASSET_THRESHOLD = 300000; // 30만원
   const filteredTableColumns = sortedTableColumns.filter((asset) => {
+    const meta = assetMetaById.get(asset.id);
+    const assetValue = (meta?.last_price_krw || 0) * (meta?.quantity || 0);
+    // 30만원 미만 종목 필터링 (showSmallAssets가 false일 때)
+    if (!showSmallAssets && assetValue < SMALL_ASSET_THRESHOLD) {
+      return false;
+    }
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
     const name = asset.name?.toLowerCase() || "";
     const symbol = asset.symbol?.toLowerCase() || "";
     return name.includes(query) || symbol.includes(query);
   });
+  const smallAssetCount = sortedTableColumns.filter((asset) => {
+    const meta = assetMetaById.get(asset.id);
+    const assetValue = (meta?.last_price_krw || 0) * (meta?.quantity || 0);
+    return assetValue < SMALL_ASSET_THRESHOLD;
+  }).length;
   // 타임존 정보가 없으면 한국 시간으로 해석
   const parseDate = (value) => {
     if (!value) return null;
@@ -643,6 +656,17 @@ const Dashboard = () => {
             className="asset-search-input"
           />
         </div>
+        {smallAssetCount > 0 && (
+          <button
+            type="button"
+            className="ghost small toggle-small-assets"
+            onClick={() => setShowSmallAssets((prev) => !prev)}
+          >
+            {showSmallAssets
+              ? `30만원 미만 종목 숨기기 (${smallAssetCount}개)`
+              : `30만원 미만 종목 보기 (${smallAssetCount}개)`}
+          </button>
+        )}
         {periodTotals.length ? (
           <>
             <div className="table-wrapper">
