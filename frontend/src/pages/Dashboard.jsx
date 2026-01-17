@@ -675,7 +675,7 @@ const Dashboard = () => {
                   <tr>
                     <th className="asset-name-col">종목</th>
                     <th>수량</th>
-                    <th>현재가(USD)</th>
+                    <th>현재가</th>
                     <th>소스</th>
                     <th>작업</th>
                     {periodTotals.map((row, index) => (
@@ -837,9 +837,13 @@ const Dashboard = () => {
                           )}
                         </td>
                         <td>
-                          {meta?.last_price_usd
-                            ? formatUSD(meta?.last_price_usd)
-                            : "-"}
+                          {(() => {
+                            const assetType = meta?.asset_type?.toLowerCase();
+                            if (assetType === "crypto" || assetType === "kr_stock") {
+                              return meta?.last_price_krw ? formatKRW(meta.last_price_krw) : "-";
+                            }
+                            return meta?.last_price_usd ? formatUSD(meta.last_price_usd) : "-";
+                          })()}
                         </td>
                         <td className="muted">
                           {meta?.source || "-"}
@@ -1085,7 +1089,13 @@ const Dashboard = () => {
                             </h4>
                             <p className="asset-change-meta">
                               보유 {formatQuantity(meta.quantity)} ·{" "}
-                              {meta.last_price_usd ? formatUSD(meta.last_price_usd) : "USD -"}
+                              {(() => {
+                                const assetType = meta?.asset_type?.toLowerCase();
+                                if (assetType === "crypto" || assetType === "kr_stock") {
+                                  return meta?.last_price_krw ? formatKRW(meta.last_price_krw) : "-";
+                                }
+                                return meta?.last_price_usd ? formatUSD(meta.last_price_usd) : "-";
+                              })()}
                             </p>
                           </>
                         )}
