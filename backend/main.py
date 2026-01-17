@@ -6,6 +6,17 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import Annotated
 
+# 로깅 설정을 다른 모듈 import 전에 먼저 수행
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    handlers=[
+        logging.FileHandler("backend/debug.log"),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger(__name__)
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -37,16 +48,6 @@ from .schemas import (
     TotalsDetailOut,
 )
 from .services.pricing import get_price_krw, get_price_krw_batch
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    handlers=[
-        logging.FileHandler("backend/debug.log"),
-        logging.StreamHandler(),
-    ],
-)
-logger = logging.getLogger(__name__)
 SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 
