@@ -242,7 +242,6 @@ async def refresh_single_asset(
 
     asset_type = asset.asset_type.lower()
     source = None
-    price_change_pct = None
     if asset_type not in {"stock", "crypto", "kr_stock"}:
         if asset.last_price_krw is None:
             asset.last_price_krw = 0.0
@@ -255,7 +254,6 @@ async def refresh_single_asset(
             asset.last_price_usd = price.price_usd
             asset.last_updated = now_seoul()
             source = price.source
-            price_change_pct = price.price_change_pct
         except Exception as exc:
             logger.exception("Price fetch failed for %s", asset.symbol)
             api_name = {"stock": "미국주식 API", "kr_stock": "국내주식 API", "crypto": "비트코인 API"}.get(asset_type, asset_type)
@@ -267,7 +265,7 @@ async def refresh_single_asset(
     db.commit()
     db.refresh(asset)
     out = asset_to_out(asset)
-    return AssetRefreshOut(**out.model_dump(), source=source, price_change_pct=price_change_pct)
+    return AssetRefreshOut(**out.model_dump(), source=source)
 
 
 @app.post("/refresh", response_model=SummaryOut)
@@ -280,9 +278,8 @@ async def refresh_prices(
     asset_totals: list[tuple[Asset, float]] = []
     errors: list[str] = []
 
-    # 자산별 source와 price_change_pct 추적
+    # 자산별 source 추적
     asset_sources: dict[int, str] = {}
-    asset_price_changes: dict[int, float | None] = {}
 
     # 외부 API 호출이 필요한 자산과 아닌 자산 분류
     fetch_targets: list[tuple[Asset, str, str]] = []  # (asset, symbol, asset_type)
@@ -295,7 +292,6 @@ async def refresh_prices(
             total += asset.last_price_krw * asset.quantity
             asset_totals.append((asset, asset.last_price_krw * asset.quantity))
             asset_sources[asset.id] = "직접입력"
-            asset_price_changes[asset.id] = None
         else:
             fetch_targets.append((asset, asset.symbol, asset_type))
 
@@ -314,7 +310,6 @@ async def refresh_prices(
                 total += price.price_krw * asset.quantity
                 asset_totals.append((asset, price.price_krw * asset.quantity))
                 asset_sources[asset.id] = price.source
-                asset_price_changes[asset.id] = price.price_change_pct
             else:
                 api_name = {"stock": "미국주식 API", "kr_stock": "국내주식 API", "crypto": "비트코인 API"}.get(asset_type, asset_type)
                 errors.append(f"{symbol} 가격 조회 실패 ({api_name})")
@@ -342,14 +337,13 @@ async def refresh_prices(
     if last_refreshed:
         next_refresh_at = last_refreshed + timedelta(minutes=30)
 
-    # AssetRefreshOut으로 변환 (source, price_change_pct 포함)
+    # AssetRefreshOut으로 변환 (source 포함)
     asset_outs = []
     for a in assets:
         out = asset_to_out(a)
         asset_outs.append(AssetRefreshOut(
             **out.model_dump(),
             source=asset_sources.get(a.id),
-            price_change_pct=asset_price_changes.get(a.id),
         ))
 
     return SummaryOut(
@@ -381,9 +375,9 @@ def get_summary(
     if last_refreshed:
         next_refresh_at = last_refreshed + timedelta(minutes=30)
 
-    # GET /summary는 저장된 데이터만 반환하므로 source/price_change_pct는 None
+    # GET /summary는 저장된 데이터만 반환하므로 source는 None
     asset_outs = [
-        AssetRefreshOut(**asset_to_out(a).model_dump(), source=None, price_change_pct=None)
+        AssetRefreshOut(**asset_to_out(a).model_dump(), source=None)
         for a in assets
     ]
 

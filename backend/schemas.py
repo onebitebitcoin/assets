@@ -48,7 +48,6 @@ class AssetOut(BaseModel):
 
 class AssetRefreshOut(AssetOut):
     source: Optional[str] = None
-    price_change_pct: Optional[float] = None
 
 
 class SummaryOut(BaseModel):

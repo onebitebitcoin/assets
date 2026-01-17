@@ -264,17 +264,6 @@ const Dashboard = () => {
       maximumFractionDigits: 2
     }).format(rounded);
   };
-  const formatPriceChange = (value) => {
-    if (value === null || value === undefined) return null;
-    const sign = value >= 0 ? "+" : "";
-    return `${sign}${value.toFixed(2)}%`;
-  };
-  const getPriceChangeClass = (value) => {
-    if (value === null || value === undefined) return "";
-    if (value > 0) return "delta-up";
-    if (value < 0) return "delta-down";
-    return "";
-  };
   const chartLabels = chartSeries.map((item) => formatAxisDate(item.period_start));
   const chartData = {
     labels: chartLabels,
@@ -583,7 +572,7 @@ const Dashboard = () => {
                     <th className="asset-name-col">종목</th>
                     <th>수량</th>
                     <th>현재가(USD)</th>
-                    <th>전일비</th>
+                    <th>소스</th>
                     {periodTotals.map((row, index) => (
                       <th key={`${row.period_start}-${index}`}>{formatAxisDate(row.period_start)}</th>
                     ))}
@@ -607,7 +596,6 @@ const Dashboard = () => {
                   </tr>
                   {filteredTableColumns.map((asset) => {
                     const meta = assetMetaById.get(asset.id);
-                    const priceChange = meta?.price_change_pct;
                     return (
                       <tr key={asset.id}>
                         <td className="asset-name-col">
@@ -619,8 +607,8 @@ const Dashboard = () => {
                             ? formatUSD(meta?.last_price_usd)
                             : "-"}
                         </td>
-                        <td className={getPriceChangeClass(priceChange)}>
-                          {formatPriceChange(priceChange) || "-"}
+                        <td className="muted">
+                          {meta?.source || "-"}
                         </td>
                         {periodTotals.map((row, index) => {
                           const current = (row.assets || []).find((item) => item.id === asset.id);
@@ -677,16 +665,15 @@ const Dashboard = () => {
               {filteredTableColumns.map((asset) => {
                 const meta = assetMetaById.get(asset.id) || {};
                 const cardKey = `asset-${asset.id}`;
-                const priceChange = meta.price_change_pct;
                 return (
                   <article key={`card-${asset.id}`} className="asset-change-card">
                     <div className="asset-change-header">
                       <div>
                         <h4>
                           {asset.name} <span className="muted">({asset.symbol})</span>
-                          {formatPriceChange(priceChange) && (
-                            <span className={`price-change-badge ${getPriceChangeClass(priceChange)}`}>
-                              {formatPriceChange(priceChange)}
+                          {meta.source && (
+                            <span className="source-badge muted">
+                              {meta.source}
                             </span>
                           )}
                         </h4>

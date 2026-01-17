@@ -4,7 +4,6 @@ import asyncio
 import logging
 from datetime import date, timedelta
 from dataclasses import dataclass
-from time import time
 from typing import Optional
 
 import httpx
@@ -15,33 +14,17 @@ logger = logging.getLogger(__name__)
 
 FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
 
-# 자산 유형별 캐시 TTL (초)
-_CACHE_TTL_MAP = {
-    "usdkrw": 0,         # 환율: 캐시 없음
-    "stock": 0,          # 미국주식: 캐시 없음
-    "kr_stock": 0,       # 한국주식: 캐시 없음
-    "btc": 0,            # 비트코인: 캐시 없음
-}
-_DEFAULT_CACHE_TTL = 0
-
-_cache: dict[str, tuple[float, float]] = {}
-# SWR 백그라운드 갱신 추적
-_swr_pending: set[str] = set()
-
 
 @dataclass
 class PriceResult:
+    """가격 조회 결과"""
     price_krw: float
-    source: str
+    source: str  # "finnhub" | "stooq" | "upbit" | "pykrx"
     price_usd: Optional[float] = None
-    previous_close_usd: Optional[float] = None
-    price_change_pct: Optional[float] = None
 
 
 async def fetch_usd_krw_rate(client: httpx.AsyncClient) -> float:
-    cached = _get_cached("usdkrw")
-    if cached is not None:
-        return cached
+    """USD/KRW 환율 조회"""
     primary_url = "https://open.er-api.com/v6/latest/USD"
     try:
         response = await client.get(primary_url, timeout=10)
@@ -52,11 +35,12 @@ async def fetch_usd_krw_rate(client: httpx.AsyncClient) -> float:
             logger.warning("Primary FX missing rates field: %s", str(data)[:200])
             raise ValueError("Missing rates from open.er-api.com")
         rate = float(rates["KRW"])
-        _set_cache("usdkrw", rate)
+        logger.info("USD/KRW rate from open.er-api.com: %.2f", rate)
         return rate
     except Exception as exc:
         logger.warning("Primary FX source failed: %s", exc)
 
+    # Fallback: frankfurter.app
     fallback_url = "https://api.frankfurter.app/latest"
     fallback_params = {"from": "USD", "to": "KRW"}
     fallback_response = await client.get(fallback_url, params=fallback_params, timeout=10)
@@ -67,288 +51,119 @@ async def fetch_usd_krw_rate(client: httpx.AsyncClient) -> float:
         logger.warning("Fallback FX missing rates field: %s", str(fallback_data)[:200])
         raise ValueError("Missing rates from frankfurter.app")
     rate = float(rates["KRW"])
-    _set_cache("usdkrw", rate)
+    logger.info("USD/KRW rate from frankfurter.app: %.2f", rate)
     return rate
 
 
-async def _fetch_from_finnhub(symbol: str, client: httpx.AsyncClient) -> tuple[float, Optional[float]]:
-    """Finnhub API에서 미국주식 가격 조회 (실시간)
+async def _fetch_from_finnhub(symbol: str, client: httpx.AsyncClient) -> Optional[float]:
+    """Finnhub API에서 미국주식 가격 조회
 
     Returns:
-        (current_price, previous_close) 튜플
+        USD 가격 또는 None (실패 시)
     """
-    logger.debug("[Finnhub] Checking API key for %s: key=%s", symbol, "SET" if settings.finnhub_api_key else "NOT SET")
     if not settings.finnhub_api_key:
-        logger.warning("[Finnhub] API key not configured, skipping Finnhub for %s", symbol)
-        raise ValueError("FINNHUB_API_KEY is not configured")
+        logger.debug("[Finnhub] API key not configured")
+        return None
 
     url = f"{FINNHUB_BASE_URL}/quote"
     params = {"symbol": symbol, "token": settings.finnhub_api_key}
-    logger.debug("Fetching stock price from Finnhub: %s", symbol)
-
-    response = await client.get(url, params=params, timeout=10)
-    response.raise_for_status()
-    data = response.json()
-
-    # c=0이면 데이터 없음 (시장 마감 또는 잘못된 심볼)
-    price = data.get("c", 0)
-    if price == 0:
-        logger.warning("Finnhub returned no data for %s (c=0)", symbol)
-        raise ValueError(f"No price data for {symbol} from Finnhub")
-
-    price = float(price)
-    previous_close = data.get("pc")
-    if previous_close:
-        previous_close = float(previous_close)
-    logger.debug("Finnhub price for %s: %.2f USD (prev: %s)", symbol, price, previous_close)
-    return price, previous_close
-
-
-async def _fetch_from_stooq(symbol: str, client: httpx.AsyncClient) -> float:
-    """Stooq API에서 미국주식 가격 조회"""
-    url = "https://stooq.com/q/l/"
-    stooq_symbol = f"{symbol.lower()}.us"
-    params = {"s": stooq_symbol, "f": "sd2t2ohlcv", "h": "", "e": "csv"}
-    logger.debug("Fetching stock price from Stooq: %s", stooq_symbol)
-    response = await client.get(url, params=params, timeout=10)
-    response.raise_for_status()
-    text = response.text.strip()
-    lines = text.splitlines()
-    if len(lines) < 2:
-        logger.warning("Stooq returned insufficient data for %s: %s", symbol, text[:200])
-        raise ValueError(f"No price data for {symbol} from Stooq")
-    headers = [h.strip().lower() for h in lines[0].split(",")]
-    values = [v.strip() for v in lines[1].split(",")]
-    if len(headers) != len(values):
-        logger.warning("Stooq header/value mismatch for %s", symbol)
-        raise ValueError(f"Invalid price data for {symbol} from Stooq")
-    data = dict(zip(headers, values))
-    close_value = data.get("close")
-    if not close_value or close_value == "N/D":
-        logger.warning("Stooq returned N/D for %s", symbol)
-        raise ValueError(f"No price data for {symbol} from Stooq (N/D)")
-    price = float(close_value)
-    logger.debug("Stooq price for %s: %.2f USD", symbol, price)
-    return price
-
-
-async def _fetch_from_yahoo(symbol: str, client: httpx.AsyncClient) -> float:
-    """Yahoo Finance API에서 미국주식 가격 조회 (fallback)"""
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-    logger.debug("Fetching stock price from Yahoo Finance: %s", symbol)
-    response = await client.get(url, timeout=10)
-    response.raise_for_status()
-    data = response.json()
-
-    chart = data.get("chart", {})
-    result = chart.get("result")
-    if not result or len(result) == 0:
-        error = chart.get("error", {})
-        error_msg = error.get("description", "Unknown error")
-        logger.warning("Yahoo Finance returned no result for %s: %s", symbol, error_msg)
-        raise ValueError(f"No price data for {symbol} from Yahoo Finance: {error_msg}")
-
-    meta = result[0].get("meta", {})
-    price = meta.get("regularMarketPrice")
-    if price is None:
-        logger.warning("Yahoo Finance missing regularMarketPrice for %s", symbol)
-        raise ValueError(f"No price data for {symbol} from Yahoo Finance")
-
-    price = float(price)
-    logger.debug("Yahoo Finance price for %s: %.2f USD", symbol, price)
-    return price
-
-
-async def _fetch_stocks_from_finnhub_batch(
-    symbols: list[str], client: httpx.AsyncClient
-) -> dict[str, tuple[float, str, Optional[float], Optional[float]]]:
-    """Finnhub API에서 여러 종목을 병렬로 조회 (Finnhub은 배치 API 미지원)
-
-    Args:
-        symbols: 주식 심볼 리스트
-        client: httpx.AsyncClient
-
-    Returns:
-        {symbol: (price, source, previous_close, price_change_pct)} 딕셔너리.
-        실패한 종목은 포함되지 않음.
-    """
-    results: dict[str, tuple[float, str, Optional[float], Optional[float]]] = {}
-
-    async def fetch_single(symbol: str) -> tuple[str, float | None, float | None]:
-        try:
-            price, previous_close = await _fetch_from_finnhub(symbol, client)
-            return (symbol, price, previous_close)
-        except Exception as exc:
-            logger.debug("Finnhub failed for %s: %s", symbol, exc)
-            return (symbol, None, None)
-
-    tasks = [fetch_single(symbol) for symbol in symbols]
-    responses = await asyncio.gather(*tasks)
-
-    for symbol, price, previous_close in responses:
-        if price is not None:
-            price_change_pct = None
-            if previous_close and previous_close > 0:
-                price_change_pct = (price - previous_close) / previous_close * 100
-            results[symbol] = (price, "finnhub", previous_close, price_change_pct)
-            _set_cache(f"stock:{symbol}", price)
-            logger.debug("Finnhub price for %s: %.2f USD (change: %s%%)", symbol, price, price_change_pct)
-
-    return results
-
-
-async def _fetch_stocks_from_yahoo_batch(
-    symbols: list[str], client: httpx.AsyncClient
-) -> dict[str, tuple[float, str, Optional[float], Optional[float]]]:
-    """Yahoo Finance API에서 여러 미국주식 가격을 한 번에 조회 (v7 quote API)
-
-    Returns:
-        {symbol: (price, source, previous_close, price_change_pct)} 딕셔너리.
-    """
-    if not symbols:
-        return {}
-
-    url = "https://query1.finance.yahoo.com/v7/finance/quote"
-    params = {"symbols": ",".join(symbols)}
-    logger.debug("Fetching stock prices from Yahoo Finance batch API: %s", symbols)
-
-    results: dict[str, tuple[float, str, Optional[float], Optional[float]]] = {}
 
     try:
-        response = await client.get(url, params=params, timeout=15)
+        response = await client.get(url, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
 
-        quote_response = data.get("quoteResponse", {})
-        quotes = quote_response.get("result", [])
+        price = data.get("c", 0)
+        if price == 0:
+            logger.warning("[Finnhub] No data for %s (c=0)", symbol)
+            return None
 
-        for quote in quotes:
-            symbol = quote.get("symbol")
-            price = quote.get("regularMarketPrice")
-            previous_close = quote.get("regularMarketPreviousClose")
-            if symbol and price is not None:
-                price = float(price)
-                prev_close = float(previous_close) if previous_close else None
-                price_change_pct = None
-                if prev_close and prev_close > 0:
-                    price_change_pct = (price - prev_close) / prev_close * 100
-                results[symbol] = (price, "yahoo", prev_close, price_change_pct)
-                _set_cache(f"stock:{symbol}", price)
-                logger.debug("Yahoo Finance batch price for %s: %.2f USD (change: %s%%)", symbol, price, price_change_pct)
-
+        price = float(price)
+        logger.info("[Finnhub] %s: %.2f USD", symbol, price)
+        return price
     except Exception as exc:
-        logger.warning("Yahoo Finance batch API failed: %s", exc)
+        logger.warning("[Finnhub] Failed for %s: %s", symbol, exc)
+        return None
 
-    return results
 
-
-async def fetch_stocks_usd_prices_batch(
-    symbols: list[str], client: httpx.AsyncClient
-) -> dict[str, tuple[float, str, Optional[float], Optional[float]]]:
-    """여러 미국주식 가격을 조회 (Finnhub 1차 -> Yahoo 2차 fallback)
-
-    Args:
-        symbols: 주식 심볼 리스트 (예: ["AAPL", "MSFT", "TSLA"])
-        client: httpx.AsyncClient
+async def _fetch_from_stooq(symbol: str, client: httpx.AsyncClient) -> Optional[float]:
+    """Stooq API에서 미국주식 가격 조회
 
     Returns:
-        {symbol: (price, source, previous_close, price_change_pct)} 딕셔너리.
-        실패한 종목은 포함되지 않음.
+        USD 가격 또는 None (실패 시)
     """
-    if not symbols:
-        return {}
+    url = "https://stooq.com/q/l/"
+    stooq_symbol = f"{symbol.lower()}.us"
+    params = {"s": stooq_symbol, "f": "sd2t2ohlcv", "h": "", "e": "csv"}
 
-    results: dict[str, tuple[float, str, Optional[float], Optional[float]]] = {}
+    try:
+        response = await client.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        text = response.text.strip()
+        lines = text.splitlines()
 
-    # 1차: Finnhub API (병렬 조회)
-    logger.info("[DEBUG] Finnhub API key check: %s (len=%d)",
-                "SET" if settings.finnhub_api_key else "NOT SET",
-                len(settings.finnhub_api_key) if settings.finnhub_api_key else 0)
-    if settings.finnhub_api_key:
-        logger.info("[DEBUG] Fetching stock prices from Finnhub: %s", symbols)
-        finnhub_results = await _fetch_stocks_from_finnhub_batch(symbols, client)
-        results.update(finnhub_results)
+        if len(lines) < 2:
+            logger.warning("[Stooq] Insufficient data for %s: %s", symbol, text[:200])
+            return None
 
-        # Finnhub 성공한 종목 로깅
-        if finnhub_results:
-            logger.info("Finnhub batch success: %s", list(finnhub_results.keys()))
-        else:
-            logger.warning("[DEBUG] Finnhub returned no results for any symbol")
-    else:
-        logger.warning("[DEBUG] Finnhub API key not configured, skipping Finnhub")
+        headers = [h.strip().lower() for h in lines[0].split(",")]
+        values = [v.strip() for v in lines[1].split(",")]
 
-    # 2차: Yahoo Finance fallback (Finnhub 실패 종목)
-    failed_symbols = list(set(symbols) - set(results.keys()))
-    if failed_symbols:
-        logger.debug("Falling back to Yahoo Finance for: %s", failed_symbols)
-        yahoo_results = await _fetch_stocks_from_yahoo_batch(failed_symbols, client)
-        results.update(yahoo_results)
+        if len(headers) != len(values):
+            logger.warning("[Stooq] Header/value mismatch for %s", symbol)
+            return None
 
-        if yahoo_results:
-            logger.info("Yahoo Finance fallback success: %s", list(yahoo_results.keys()))
+        data = dict(zip(headers, values))
+        close_value = data.get("close")
 
-    # 최종 실패 종목 로깅
-    final_failed = set(symbols) - set(results.keys())
-    if final_failed:
-        logger.warning("Batch API missing symbols after all sources: %s", final_failed)
+        if not close_value or close_value == "N/D":
+            logger.warning("[Stooq] N/D for %s", symbol)
+            return None
 
-    return results
+        price = float(close_value)
+        logger.info("[Stooq] %s: %.2f USD", symbol, price)
+        return price
+    except Exception as exc:
+        logger.warning("[Stooq] Failed for %s: %s", symbol, exc)
+        return None
 
 
-async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> tuple[float, str, Optional[float], Optional[float]]:
-    """미국주식 USD 가격 조회 (Finnhub 1차, Yahoo 2차, Stooq 3차)
+async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> tuple[float, str]:
+    """미국주식 USD 가격 조회 (Finnhub 1차, Stooq 2차)
 
     Returns:
-        (price, source, previous_close, price_change_pct) 튜플.
-        source는 "finnhub", "yahoo", "stooq", "cache" 중 하나.
+        (USD 가격, 소스) 튜플
+
+    Raises:
+        ValueError: 모든 소스에서 실패 시
     """
-    # 1차: Finnhub API (실시간 가격)
-    if settings.finnhub_api_key:
-        try:
-            price, previous_close = await _fetch_from_finnhub(symbol, client)
-            _set_cache(f"stock:{symbol}", price)
-            price_change_pct = None
-            if previous_close and previous_close > 0:
-                price_change_pct = (price - previous_close) / previous_close * 100
-            return price, "finnhub", previous_close, price_change_pct
-        except Exception as exc:
-            logger.warning("Finnhub failed for %s: %s, trying Yahoo", symbol, exc)
-    else:
-        logger.debug("Finnhub API key not configured, skipping Finnhub")
+    # 1차: Finnhub
+    price = await _fetch_from_finnhub(symbol, client)
+    if price is not None:
+        return price, "finnhub"
 
-    # 2차: Yahoo Finance API (fallback)
-    try:
-        price = await _fetch_from_yahoo(symbol, client)
-        _set_cache(f"stock:{symbol}", price)
-        return price, "yahoo", None, None
-    except Exception as exc:
-        logger.warning("Yahoo Finance failed for %s: %s, trying Stooq", symbol, exc)
+    # 2차: Stooq
+    price = await _fetch_from_stooq(symbol, client)
+    if price is not None:
+        return price, "stooq"
 
-    # 3차: Stooq API (fallback, 종가)
-    try:
-        price = await _fetch_from_stooq(symbol, client)
-        _set_cache(f"stock:{symbol}", price)
-        return price, "stooq", None, None
-    except Exception as exc:
-        logger.error("All sources failed for %s: %s", symbol, exc)
-        raise ValueError(f"All price sources failed for {symbol}")
+    raise ValueError(f"All price sources failed for {symbol}")
 
 
 async def fetch_btc_krw_price(client: httpx.AsyncClient) -> float:
-    cached = _get_cached("btc")
-    if cached is not None:
-        return cached
+    """Upbit에서 BTC 원화 가격 조회"""
     url = "https://api.upbit.com/v1/ticker"
     params = {"markets": "KRW-BTC"}
     response = await client.get(url, params=params, timeout=10)
     response.raise_for_status()
     data = response.json()
     price = float(data[0]["trade_price"])
-    _set_cache("btc", price)
+    logger.info("[Upbit] BTC: %.0f KRW", price)
     return price
 
 
 def _fetch_krx_close_price(symbol: str) -> float:
+    """pykrx에서 한국주식 종가 조회 (동기 함수)"""
     from pykrx import stock
 
     today = date.today()
@@ -359,129 +174,62 @@ def _fetch_krx_close_price(symbol: str) -> float:
         if data is None or data.empty:
             continue
         close = data["종가"].iloc[-1]
+        logger.info("[pykrx] %s: %.0f KRW", symbol, close)
         return float(close)
     raise ValueError(f"No price data for {symbol}")
 
 
 async def fetch_kr_stock_krw_price(symbol: str) -> float:
+    """한국주식 원화 가격 조회"""
     # Remove exchange suffix (.KS, .KQ) if present
     clean_symbol = symbol.split('.')[0]
-    cached = _get_cached(f"kr_stock:{clean_symbol}")
-    if cached is not None:
-        return cached
     price = await asyncio.to_thread(_fetch_krx_close_price, clean_symbol)
-    _set_cache(f"kr_stock:{clean_symbol}", price)
     return price
 
 
 async def get_price_krw(symbol: str, asset_type: str) -> PriceResult:
+    """자산 유형별 가격 조회
+
+    Args:
+        symbol: 자산 심볼
+        asset_type: "stock", "kr_stock", "crypto" 중 하나
+
+    Returns:
+        PriceResult 객체
+    """
     async with httpx.AsyncClient() as client:
         if asset_type == "stock":
-            try:
-                usd_price, price_source, previous_close, price_change_pct = await fetch_stock_usd_price(symbol, client)
-                rate = await fetch_usd_krw_rate(client)
-                return PriceResult(
-                    price_krw=usd_price * rate,
-                    source=price_source,
-                    price_usd=usd_price,
-                    previous_close_usd=previous_close,
-                    price_change_pct=price_change_pct,
-                )
-            except (httpx.HTTPError, ValueError) as exc:
-                cached = _get_cached(f"stock:{symbol}", allow_stale=True)
-                cached_rate = _get_cached("usdkrw", allow_stale=True)
-                if cached is not None and cached_rate is not None:
-                    logger.warning("Using cached stock price for %s after error: %s", symbol, exc)
-                    return PriceResult(
-                        price_krw=cached * cached_rate,
-                        source="cache",
-                        price_usd=cached,
-                    )
-            raise
+            usd_price, source = await fetch_stock_usd_price(symbol, client)
+            rate = await fetch_usd_krw_rate(client)
+            return PriceResult(
+                price_krw=usd_price * rate,
+                source=source,
+                price_usd=usd_price,
+            )
+
         if asset_type == "kr_stock":
-            try:
-                krw_price = await fetch_kr_stock_krw_price(symbol)
-                return PriceResult(price_krw=krw_price, source="pykrx")
-            except Exception as exc:
-                cached = _get_cached(f"kr_stock:{symbol}", allow_stale=True)
-                if cached is not None:
-                    logger.warning("Using cached KR stock price for %s after error: %s", symbol, exc)
-                    return PriceResult(price_krw=cached, source="cache")
-                raise
+            krw_price = await fetch_kr_stock_krw_price(symbol)
+            return PriceResult(price_krw=krw_price, source="pykrx")
+
         if asset_type == "crypto" and symbol.upper() == "BTC":
-            try:
-                btc_price = await fetch_btc_krw_price(client)
-                return PriceResult(price_krw=btc_price, source="upbit")
-            except (httpx.HTTPError, ValueError) as exc:
-                cached = _get_cached("btc", allow_stale=True)
-                if cached is not None:
-                    logger.warning("Using cached BTC price after error: %s", exc)
-                    return PriceResult(price_krw=cached, source="cache")
-                raise
+            btc_price = await fetch_btc_krw_price(client)
+            return PriceResult(price_krw=btc_price, source="upbit")
 
-    raise ValueError("Unsupported asset type or symbol")
-
-
-def _get_cache_ttl(key: str) -> int:
-    """캐시 키에 해당하는 TTL 반환"""
-    for prefix, ttl in _CACHE_TTL_MAP.items():
-        if key == prefix or key.startswith(f"{prefix}:"):
-            return ttl
-    return _DEFAULT_CACHE_TTL
-
-
-def _get_cached(key: str, allow_stale: bool = False) -> Optional[float]:
-    entry = _cache.get(key)
-    if not entry:
-        return None
-    timestamp, value = entry
-    ttl = _get_cache_ttl(key)
-    if allow_stale or (time() - timestamp) < ttl:
-        return value
-    return None
-
-
-def _is_cache_fresh(key: str) -> bool:
-    """캐시가 아직 유효한지 확인"""
-    entry = _cache.get(key)
-    if not entry:
-        return False
-    timestamp, _ = entry
-    ttl = _get_cache_ttl(key)
-    return (time() - timestamp) < ttl
-
-
-def _set_cache(key: str, value: float) -> None:
-    _cache[key] = (time(), value)
-
-
-async def _refresh_cache_background(key: str, fetch_coro) -> None:
-    """백그라운드에서 캐시 갱신 (SWR 패턴)"""
-    if key in _swr_pending:
-        return
-    _swr_pending.add(key)
-    try:
-        await fetch_coro
-    except Exception as exc:
-        logger.warning("Background cache refresh failed for %s: %s", key, exc)
-    finally:
-        _swr_pending.discard(key)
+    raise ValueError(f"Unsupported asset type or symbol: {asset_type}/{symbol}")
 
 
 async def get_price_krw_batch(assets: list[tuple[str, str]]) -> dict[str, PriceResult]:
-    """
-    여러 자산의 가격을 병렬로 조회합니다.
-    미국 주식(stock)은 Yahoo Finance 배치 API로 한 번에 조회합니다.
+    """여러 자산의 가격을 병렬로 조회
 
     Args:
         assets: [(symbol, asset_type), ...] 형태의 리스트
 
     Returns:
-        {symbol: PriceResult} 형태의 딕셔너리. 실패한 경우 해당 키 없음.
+        {symbol: PriceResult} 딕셔너리. 실패한 경우 해당 키 없음.
     """
     results: dict[str, PriceResult] = {}
 
-    # 미국 주식과 기타 자산 분리
+    # 자산 유형별 분류
     us_stock_symbols: list[str] = []
     other_assets: list[tuple[str, str]] = []
 
@@ -492,53 +240,70 @@ async def get_price_krw_batch(assets: list[tuple[str, str]]) -> dict[str, PriceR
             other_assets.append((symbol, asset_type))
 
     async with httpx.AsyncClient() as client:
-        # 1. 미국 주식: 배치 API로 한 번에 조회
+        # 1. 미국 주식: 병렬 조회
         if us_stock_symbols:
-            batch_prices = await fetch_stocks_usd_prices_batch(us_stock_symbols, client)
-
-            # 배치 API 실패한 종목은 Stooq fallback 시도
-            failed_symbols = set(us_stock_symbols) - set(batch_prices.keys())
-
-            # 환율 조회 (미국 주식이 있으면 필요)
-            rate = await fetch_usd_krw_rate(client)
-
-            # 배치 성공한 종목 결과 저장
-            for symbol, (usd_price, source, previous_close, price_change_pct) in batch_prices.items():
-                results[symbol] = PriceResult(
-                    price_krw=usd_price * rate,
-                    source=source,
-                    price_usd=usd_price,
-                    previous_close_usd=previous_close,
-                    price_change_pct=price_change_pct,
-                )
-
-            # 배치 실패한 종목은 Stooq fallback
-            for symbol in failed_symbols:
-                try:
-                    price = await _fetch_from_stooq(symbol, client)
-                    _set_cache(f"stock:{symbol}", price)
-                    results[symbol] = PriceResult(
-                        price_krw=price * rate,
-                        source="stooq",
-                        price_usd=price,
-                    )
-                except Exception as exc:
-                    logger.warning("Stooq fallback also failed for %s: %s", symbol, exc)
-
-        # 2. 기타 자산 (한국주식, 암호화폐 등): 개별 조회
-        async def fetch_single(symbol: str, asset_type: str) -> tuple[str, PriceResult | None]:
+            # 환율 먼저 조회
             try:
-                result = await get_price_krw(symbol, asset_type)
-                return (symbol, result)
+                rate = await fetch_usd_krw_rate(client)
+            except Exception as exc:
+                logger.error("Failed to fetch USD/KRW rate: %s", exc)
+                rate = None
+
+            if rate:
+                async def fetch_single_stock(symbol: str) -> tuple[str, Optional[PriceResult]]:
+                    # 1차: Finnhub
+                    price = await _fetch_from_finnhub(symbol, client)
+                    if price is not None:
+                        return symbol, PriceResult(
+                            price_krw=price * rate,
+                            source="finnhub",
+                            price_usd=price,
+                        )
+                    # 2차: Stooq
+                    price = await _fetch_from_stooq(symbol, client)
+                    if price is not None:
+                        return symbol, PriceResult(
+                            price_krw=price * rate,
+                            source="stooq",
+                            price_usd=price,
+                        )
+                    return symbol, None
+
+                tasks = [fetch_single_stock(symbol) for symbol in us_stock_symbols]
+                stock_results = await asyncio.gather(*tasks)
+
+                for symbol, result in stock_results:
+                    if result is not None:
+                        results[symbol] = result
+                    else:
+                        logger.warning("All sources failed for %s", symbol)
+
+        # 2. 기타 자산 (한국주식, 암호화폐): 개별 조회
+        async def fetch_single_other(symbol: str, asset_type: str) -> tuple[str, Optional[PriceResult]]:
+            try:
+                if asset_type == "kr_stock":
+                    krw_price = await fetch_kr_stock_krw_price(symbol)
+                    return symbol, PriceResult(price_krw=krw_price, source="pykrx")
+                elif asset_type == "crypto" and symbol.upper() == "BTC":
+                    btc_price = await fetch_btc_krw_price(client)
+                    return symbol, PriceResult(price_krw=btc_price, source="upbit")
+                else:
+                    return symbol, None
             except Exception as exc:
                 logger.warning("Price fetch failed for %s: %s", symbol, exc)
-                return (symbol, None)
+                return symbol, None
 
         if other_assets:
-            tasks = [fetch_single(symbol, asset_type) for symbol, asset_type in other_assets]
+            tasks = [fetch_single_other(symbol, asset_type) for symbol, asset_type in other_assets]
             other_results = await asyncio.gather(*tasks)
             for symbol, result in other_results:
                 if result is not None:
                     results[symbol] = result
+
+    # 결과 요약 로그
+    source_counts: dict[str, int] = {}
+    for r in results.values():
+        source_counts[r.source] = source_counts.get(r.source, 0) + 1
+    logger.info("Batch price fetch completed: %s", source_counts)
 
     return results
