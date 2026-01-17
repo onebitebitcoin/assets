@@ -1204,6 +1204,12 @@ button:disabled {
   text-align: right;
 }
 
+.recent-update-source {
+  font-size: 0.75rem;
+  min-width: 80px;
+  text-align: center;
+}
+
 @media (max-width: 640px) {
   .recent-update-item {
     flex-direction: column;

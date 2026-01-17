@@ -218,6 +218,9 @@ const Settings = () => {
                   <div className="recent-update-time">
                     {formatUpdatedAt(asset.last_updated)}
                   </div>
+                  <div className="recent-update-source muted">
+                    {asset.source || "-"}
+                  </div>
                   <button
                     className="icon-btn small"
                     onClick={() => onRefreshAsset(asset.id)}
