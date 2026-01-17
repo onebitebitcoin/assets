@@ -121,15 +121,6 @@ const Settings = () => {
     return Number.isNaN(date.getTime()) ? null : date;
   };
 
-  const lastUpdatedTimes = assets
-    .map((a) => a.last_updated)
-    .filter(Boolean)
-    .map((t) => parseDate(t)?.getTime())
-    .filter((t) => t && !Number.isNaN(t));
-  const latestUpdate = lastUpdatedTimes.length
-    ? new Date(Math.max(...lastUpdatedTimes))
-    : null;
-
   // 최근 업데이트된 자산 (24시간 이내)
   const now = new Date();
   const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -236,110 +227,6 @@ const Settings = () => {
           </section>
         )}
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <h3>전체 자산 가격 현황</h3>
-              <p className="subtext">
-                {latestUpdate
-                  ? `마지막 업데이트: ${formatUpdatedAt(latestUpdate)}`
-                  : "아직 가격이 갱신되지 않았습니다"}
-              </p>
-            </div>
-          </div>
-
-          {loading ? (
-            <p className="muted">불러오는 중...</p>
-          ) : assets.length ? (
-            <>
-              <div className="table-wrapper">
-                <table className="asset-table settings-price-table">
-                  <thead>
-                    <tr>
-                      <th>종목</th>
-                      <th>유형</th>
-                      <th>수량</th>
-                      <th>단가(USD)</th>
-                      <th>단가(KRW)</th>
-                      <th>총액(KRW)</th>
-                      <th>업데이트</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assets.map((asset) => (
-                      <tr key={asset.id}>
-                        <td>
-                          {asset.name}{" "}
-                          <span className="muted">({asset.symbol})</span>
-                        </td>
-                        <td>{getAssetTypeName(asset.asset_type)}</td>
-                        <td>
-                          {new Intl.NumberFormat("ko-KR", {
-                            maximumFractionDigits: 2
-                          }).format(asset.quantity)}
-                        </td>
-                        <td>{asset.last_price_usd ? formatUSD(asset.last_price_usd) : "-"}</td>
-                        <td>{asset.last_price_krw ? formatKRW(asset.last_price_krw) : "-"}</td>
-                        <td>
-                          {asset.last_price_krw
-                            ? formatKRW(asset.last_price_krw * asset.quantity)
-                            : "-"}
-                        </td>
-                        <td className="update-time">{formatUpdatedAt(asset.last_updated)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="settings-price-cards">
-                {assets.map((asset) => (
-                  <article key={asset.id} className="settings-price-card">
-                    <div className="settings-price-card-header">
-                      <h4>
-                        {asset.name} <span className="muted">({asset.symbol})</span>
-                      </h4>
-                      <span className="settings-price-card-type">
-                        {getAssetTypeName(asset.asset_type)}
-                      </span>
-                    </div>
-                    <div className="settings-price-card-body">
-                      <div className="settings-price-row">
-                        <span className="label">수량</span>
-                        <span>
-                          {new Intl.NumberFormat("ko-KR", {
-                            maximumFractionDigits: 2
-                          }).format(asset.quantity)}
-                        </span>
-                      </div>
-                      <div className="settings-price-row">
-                        <span className="label">단가(USD)</span>
-                        <span>{asset.last_price_usd ? formatUSD(asset.last_price_usd) : "-"}</span>
-                      </div>
-                      <div className="settings-price-row">
-                        <span className="label">단가(KRW)</span>
-                        <span>{asset.last_price_krw ? formatKRW(asset.last_price_krw) : "-"}</span>
-                      </div>
-                      <div className="settings-price-row total">
-                        <span className="label">총액</span>
-                        <span>
-                          {asset.last_price_krw
-                            ? formatKRW(asset.last_price_krw * asset.quantity)
-                            : "-"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="settings-price-card-footer">
-                      <span className="muted">{formatUpdatedAt(asset.last_updated)}</span>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </>
-          ) : (
-            <p className="muted">등록된 자산이 없습니다.</p>
-          )}
-        </section>
       </div>
     </>
   );
