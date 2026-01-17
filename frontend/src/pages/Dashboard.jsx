@@ -298,7 +298,12 @@ const Dashboard = () => {
 
       // 2. 그 다음 스냅샷 저장
       await snapshotTotals();
-      await loadTotals(0, false, period);
+
+      // 3. 자산 변화 테이블과 요약 정보 새로고침
+      await Promise.all([
+        loadTotals(0, false, period),
+        loadSummary()
+      ]);
       setSuccess("가격 갱신 후 스냅샷이 저장되었습니다.");
     } catch (err) {
       setError(err.message);
