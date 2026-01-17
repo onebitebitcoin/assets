@@ -84,7 +84,7 @@ PID_DIR="${ROOT_DIR}/pids"
 mkdir -p "${PID_DIR}"
 
 echo "Starting backend on ${BACKEND_PORT}..."
-nohup "${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${BACKEND_PORT}" > "${LOG_DIR}/debug.log" 2>&1 &
+nohup "${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${BACKEND_PORT}" > "${ROOT_DIR}/backend/debug.log" 2>&1 &
 BACKEND_PID=$!
 echo "${BACKEND_PID}" > "${PID_DIR}/backend.pid"
 disown "${BACKEND_PID}"
@@ -92,7 +92,7 @@ echo "Backend started with PID ${BACKEND_PID} (detached)"
 
 echo "Starting frontend on ${FRONTEND_PORT}..."
 VITE_API_BASE="${VITE_API_BASE:-https://ubuntu.golden-ghost.ts.net:8443/api}" \
-  nohup npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" > "${LOG_DIR}/frontend.log" 2>&1 &
+  nohup npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" > "${ROOT_DIR}/frontend/debug.log" 2>&1 &
 FRONTEND_PID=$!
 echo "${FRONTEND_PID}" > "${PID_DIR}/frontend.pid"
 disown "${FRONTEND_PID}"
@@ -131,8 +131,8 @@ echo "  Backend:  ${BACKEND_PID} (saved in ${PID_DIR}/backend.pid)"
 echo "  Frontend: ${FRONTEND_PID} (saved in ${PID_DIR}/frontend.pid)"
 echo ""
 echo "Logs:"
-echo "  Backend:  ${LOG_DIR}/debug.log"
-echo "  Frontend: ${LOG_DIR}/frontend.log"
+echo "  Backend:  ${ROOT_DIR}/backend/debug.log"
+echo "  Frontend: ${ROOT_DIR}/frontend/debug.log"
 echo ""
 echo "To stop services, run:"
 echo "  kill \$(cat ${PID_DIR}/backend.pid ${PID_DIR}/frontend.pid)"
@@ -141,6 +141,6 @@ echo "Tailscale serve is not configured by this script."
 echo "Run: sudo ./tailscale.sh [--reset]"
 echo ""
 echo "To view logs:"
-echo "  tail -f ${LOG_DIR}/debug.log"
-echo "  tail -f ${LOG_DIR}/frontend.log"
+echo "  tail -f ${ROOT_DIR}/backend/debug.log"
+echo "  tail -f ${ROOT_DIR}/frontend/debug.log"
 echo ""
