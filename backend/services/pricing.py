@@ -120,6 +120,55 @@ async def _fetch_from_yahoo(symbol: str, client: httpx.AsyncClient) -> float:
     return price
 
 
+async def fetch_stocks_usd_prices_batch(
+    symbols: list[str], client: httpx.AsyncClient
+) -> dict[str, tuple[float, str]]:
+    """Yahoo Finance API에서 여러 미국주식 가격을 한 번에 조회 (v7 quote API)
+
+    Args:
+        symbols: 주식 심볼 리스트 (예: ["AAPL", "MSFT", "TSLA"])
+        client: httpx.AsyncClient
+
+    Returns:
+        {symbol: (price, source)} 딕셔너리. 실패한 종목은 포함되지 않음.
+    """
+    if not symbols:
+        return {}
+
+    url = "https://query1.finance.yahoo.com/v7/finance/quote"
+    params = {"symbols": ",".join(symbols)}
+    logger.debug("Fetching stock prices from Yahoo Finance batch API: %s", symbols)
+
+    results: dict[str, tuple[float, str]] = {}
+
+    try:
+        response = await client.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        quote_response = data.get("quoteResponse", {})
+        quotes = quote_response.get("result", [])
+
+        for quote in quotes:
+            symbol = quote.get("symbol")
+            price = quote.get("regularMarketPrice")
+            if symbol and price is not None:
+                results[symbol] = (float(price), "yahoo")
+                _set_cache(f"stock:{symbol}", float(price))
+                logger.debug("Yahoo Finance batch price for %s: %.2f USD", symbol, price)
+
+        # 조회 실패한 심볼 로깅
+        fetched_symbols = set(results.keys())
+        failed_symbols = set(symbols) - fetched_symbols
+        if failed_symbols:
+            logger.warning("Yahoo Finance batch API missing symbols: %s", failed_symbols)
+
+    except Exception as exc:
+        logger.warning("Yahoo Finance batch API failed: %s", exc)
+
+    return results
+
+
 async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> tuple[float, str]:
     """미국주식 USD 가격 조회 (Yahoo Finance 1차, Stooq 2차)
 
@@ -279,6 +328,7 @@ async def _refresh_cache_background(key: str, fetch_coro) -> None:
 async def get_price_krw_batch(assets: list[tuple[str, str]]) -> dict[str, PriceResult]:
     """
     여러 자산의 가격을 병렬로 조회합니다.
+    미국 주식(stock)은 Yahoo Finance 배치 API로 한 번에 조회합니다.
 
     Args:
         assets: [(symbol, asset_type), ...] 형태의 리스트
@@ -286,14 +336,64 @@ async def get_price_krw_batch(assets: list[tuple[str, str]]) -> dict[str, PriceR
     Returns:
         {symbol: PriceResult} 형태의 딕셔너리. 실패한 경우 해당 키 없음.
     """
-    async def fetch_single(symbol: str, asset_type: str) -> tuple[str, PriceResult | None]:
-        try:
-            result = await get_price_krw(symbol, asset_type)
-            return (symbol, result)
-        except Exception as exc:
-            logger.warning("Price fetch failed for %s: %s", symbol, exc)
-            return (symbol, None)
+    results: dict[str, PriceResult] = {}
 
-    tasks = [fetch_single(symbol, asset_type) for symbol, asset_type in assets]
-    results = await asyncio.gather(*tasks)
-    return {symbol: result for symbol, result in results if result is not None}
+    # 미국 주식과 기타 자산 분리
+    us_stock_symbols: list[str] = []
+    other_assets: list[tuple[str, str]] = []
+
+    for symbol, asset_type in assets:
+        if asset_type == "stock":
+            us_stock_symbols.append(symbol)
+        else:
+            other_assets.append((symbol, asset_type))
+
+    async with httpx.AsyncClient() as client:
+        # 1. 미국 주식: Yahoo Finance 배치 API로 한 번에 조회
+        if us_stock_symbols:
+            batch_prices = await fetch_stocks_usd_prices_batch(us_stock_symbols, client)
+
+            # 배치 API 실패한 종목은 Stooq fallback 시도
+            failed_symbols = set(us_stock_symbols) - set(batch_prices.keys())
+
+            # 환율 조회 (미국 주식이 있으면 필요)
+            rate = await fetch_usd_krw_rate(client)
+
+            # 배치 성공한 종목 결과 저장
+            for symbol, (usd_price, source) in batch_prices.items():
+                results[symbol] = PriceResult(
+                    price_krw=usd_price * rate,
+                    source=source,
+                    price_usd=usd_price,
+                )
+
+            # 배치 실패한 종목은 Stooq fallback
+            for symbol in failed_symbols:
+                try:
+                    price = await _fetch_from_stooq(symbol, client)
+                    _set_cache(f"stock:{symbol}", price)
+                    results[symbol] = PriceResult(
+                        price_krw=price * rate,
+                        source="stooq",
+                        price_usd=price,
+                    )
+                except Exception as exc:
+                    logger.warning("Stooq fallback also failed for %s: %s", symbol, exc)
+
+        # 2. 기타 자산 (한국주식, 암호화폐 등): 개별 조회
+        async def fetch_single(symbol: str, asset_type: str) -> tuple[str, PriceResult | None]:
+            try:
+                result = await get_price_krw(symbol, asset_type)
+                return (symbol, result)
+            except Exception as exc:
+                logger.warning("Price fetch failed for %s: %s", symbol, exc)
+                return (symbol, None)
+
+        if other_assets:
+            tasks = [fetch_single(symbol, asset_type) for symbol, asset_type in other_assets]
+            other_results = await asyncio.gather(*tasks)
+            for symbol, result in other_results:
+                if result is not None:
+                    results[symbol] = result
+
+    return results
