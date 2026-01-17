@@ -38,8 +38,7 @@ const Dashboard = () => {
   const initialLoadDone = useRef(false);
   const [summary, setSummary] = useState({ total_krw: 0, daily_change_krw: 0, assets: [] });
   const [summaryLoading, setSummaryLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+    const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [period, setPeriod] = useState("daily");
   const [periodTotals, setPeriodTotals] = useState([]);
@@ -78,38 +77,6 @@ const Dashboard = () => {
     }
   };
 
-  // 수동 새로고침 (POST /refresh 호출)
-  const handleManualRefresh = async () => {
-    setRefreshing(true);
-    setError("");
-    setSuccess("");
-    try {
-      const data = await refreshSummary();
-      setSummary(data);
-      if (data.errors && data.errors.length > 0) {
-        setError(data.errors.join(", "));
-      } else {
-        // source별 개수 집계
-        const sourceCounts = {};
-        (data.assets || []).forEach((asset) => {
-          if (asset.source) {
-            sourceCounts[asset.source] = (sourceCounts[asset.source] || 0) + 1;
-          }
-        });
-        const sourceText = Object.entries(sourceCounts)
-          .map(([source, count]) => `${source}: ${count}`)
-          .join(", ");
-        const successMsg = sourceText
-          ? `가격이 업데이트되었습니다. (${sourceText})`
-          : "가격이 업데이트되었습니다.";
-        setSuccess(successMsg);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   useEffect(() => {
     // 초기 로딩: summary와 totals를 병렬로 요청
@@ -544,18 +511,7 @@ const Dashboard = () => {
             <>
               <div className="summary-total">
                 <p className="label">총 자산</p>
-                <div className="summary-total-row">
-                  <h2>{formatKRW(summary.total_krw)}</h2>
-                  <button
-                    className="icon-btn refresh-btn"
-                    onClick={handleManualRefresh}
-                    disabled={refreshing}
-                    title="가격 새로고침"
-                    type="button"
-                  >
-                    <i className={`fa-solid fa-arrows-rotate${refreshing ? " spinning" : ""}`} />
-                  </button>
-                </div>
+                <h2>{formatKRW(summary.total_krw)}</h2>
               </div>
               <div>
                 <p className="label">오늘 변화량</p>
