@@ -7,10 +7,16 @@ from zoneinfo import ZoneInfo
 from typing import Annotated
 
 # 로깅 설정을 다른 모듈 import 전에 먼저 수행
-# stdout은 deploy.sh에서 logs/debug.log로 리디렉션됨
+import os
+_log_dir = os.path.dirname(os.path.abspath(__file__))
+_log_file = os.path.join(_log_dir, "debug.log")
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    handlers=[
+        logging.FileHandler(_log_file),
+        logging.StreamHandler(),
+    ],
 )
 logger = logging.getLogger(__name__)
 
