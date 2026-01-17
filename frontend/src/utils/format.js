@@ -54,17 +54,7 @@ export const formatRelativeTime = (dateString) => {
 
 export const formatDateTime = (dateString) => {
   if (!dateString) return "-";
-  const raw = typeof dateString === "string" ? dateString : dateString.toString();
-  const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
-  const hasTime = /T\d{2}:/.test(raw);
-  let dateStr = raw;
-  // 날짜만 있는 경우 (YYYY-MM-DD) 시간 추가
-  if (!hasTimezone && !hasTime) {
-    dateStr = `${raw}T00:00:00+09:00`;
-  } else if (!hasTimezone) {
-    dateStr = `${raw}+09:00`;
-  }
-  const date = new Date(dateStr);
+  const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return "-";
   return new Intl.DateTimeFormat("ko-KR", {
     month: "2-digit",
