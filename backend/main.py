@@ -39,10 +39,10 @@ from .schemas import (
 from .services.pricing import get_price_krw, get_price_krw_batch
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     handlers=[
-        logging.FileHandler("backend/backend.log"),
+        logging.FileHandler("backend/debug.log"),
         logging.StreamHandler(),
     ],
 )

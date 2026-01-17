@@ -77,7 +77,9 @@ async def _fetch_from_finnhub(symbol: str, client: httpx.AsyncClient) -> tuple[f
     Returns:
         (current_price, previous_close) 튜플
     """
+    logger.debug("[Finnhub] Checking API key for %s: key=%s", symbol, "SET" if settings.finnhub_api_key else "NOT SET")
     if not settings.finnhub_api_key:
+        logger.warning("[Finnhub] API key not configured, skipping Finnhub for %s", symbol)
         raise ValueError("FINNHUB_API_KEY is not configured")
 
     url = f"{FINNHUB_BASE_URL}/quote"
@@ -259,16 +261,21 @@ async def fetch_stocks_usd_prices_batch(
     results: dict[str, tuple[float, str, Optional[float], Optional[float]]] = {}
 
     # 1차: Finnhub API (병렬 조회)
+    logger.info("[DEBUG] Finnhub API key check: %s (len=%d)",
+                "SET" if settings.finnhub_api_key else "NOT SET",
+                len(settings.finnhub_api_key) if settings.finnhub_api_key else 0)
     if settings.finnhub_api_key:
-        logger.debug("Fetching stock prices from Finnhub: %s", symbols)
+        logger.info("[DEBUG] Fetching stock prices from Finnhub: %s", symbols)
         finnhub_results = await _fetch_stocks_from_finnhub_batch(symbols, client)
         results.update(finnhub_results)
 
         # Finnhub 성공한 종목 로깅
         if finnhub_results:
             logger.info("Finnhub batch success: %s", list(finnhub_results.keys()))
+        else:
+            logger.warning("[DEBUG] Finnhub returned no results for any symbol")
     else:
-        logger.debug("Finnhub API key not configured, skipping Finnhub")
+        logger.warning("[DEBUG] Finnhub API key not configured, skipping Finnhub")
 
     # 2차: Yahoo Finance fallback (Finnhub 실패 종목)
     failed_symbols = list(set(symbols) - set(results.keys()))
