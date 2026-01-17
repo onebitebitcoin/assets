@@ -2,7 +2,6 @@ import { Route, Routes, Navigate } from "react-router-dom";
 import Login from "./pages/Login.jsx";
 import Signup from "./pages/Signup.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
-import EditAssets from "./pages/EditAssets.jsx";
 import Settings from "./pages/Settings.jsx";
 import { getToken } from "./api.js";
 
@@ -24,14 +23,6 @@ const App = () => (
       element={
         <RequireAuth>
           <Dashboard />
-        </RequireAuth>
-      }
-    />
-    <Route
-      path="/edit-assets"
-      element={
-        <RequireAuth>
-          <EditAssets />
         </RequireAuth>
       }
     />

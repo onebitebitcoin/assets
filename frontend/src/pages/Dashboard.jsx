@@ -11,12 +11,16 @@ import {
 } from "chart.js";
 import { Doughnut, Line } from "react-chartjs-2";
 import { useNavigate } from "react-router-dom";
+import { Pencil, Plus, Check, X, Trash2 } from "lucide-react";
 import {
+  addAsset,
   clearToken,
+  deleteAsset,
   fetchSummary,
   fetchTotalsDetail,
   refreshSummary,
-  snapshotTotals
+  snapshotTotals,
+  updateAsset
 } from "../api.js";
 import { formatDelta, formatKRW, formatRelativeTime, formatUSD } from "../utils/format.js";
 
@@ -47,6 +51,13 @@ const Dashboard = () => {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [cardHistoryOpen, setCardHistoryOpen] = useState({});
+  const [editingAssetId, setEditingAssetId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", quantity: "" });
+  const [addingNew, setAddingNew] = useState(false);
+  const [newAssetForm, setNewAssetForm] = useState({
+    name: "", symbol: "", asset_type: "stock", quantity: 1, custom_type: "", price_krw: ""
+  });
+  const [saving, setSaving] = useState(false);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -136,9 +147,117 @@ const Dashboard = () => {
     }
   };
 
-  const onEditAssets = () => {
-    navigate("/edit-assets");
+  // 인라인 편집 핸들러
+  const startEdit = (asset) => {
+    setEditingAssetId(asset.id);
+    setEditForm({ name: asset.name, quantity: String(asset.quantity) });
   };
+
+  const cancelEdit = () => {
+    setEditingAssetId(null);
+    setEditForm({ name: "", quantity: "" });
+  };
+
+  const saveEdit = async (assetId) => {
+    const quantity = Number(editForm.quantity);
+    if (!editForm.name.trim()) {
+      setError("이름을 입력해주세요.");
+      return;
+    }
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setError("수량은 1 이상의 정수만 가능합니다.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    // Optimistic Update
+    const prevAssets = summary.assets;
+    setSummary((prev) => ({
+      ...prev,
+      assets: prev.assets.map((a) =>
+        a.id === assetId ? { ...a, name: editForm.name.trim(), quantity } : a
+      )
+    }));
+    try {
+      await updateAsset(assetId, { name: editForm.name.trim(), quantity });
+      setSuccess("저장되었습니다.");
+      cancelEdit();
+    } catch (err) {
+      // 롤백
+      setSummary((prev) => ({ ...prev, assets: prevAssets }));
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (assetId, assetName) => {
+    if (!window.confirm(`"${assetName}"을(를) 삭제하시겠습니까?`)) return;
+    setError("");
+    try {
+      await deleteAsset(assetId);
+      setSummary((prev) => ({
+        ...prev,
+        assets: prev.assets.filter((a) => a.id !== assetId)
+      }));
+      setSuccess("자산이 삭제되었습니다.");
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleAddAsset = async () => {
+    const quantity = Number(newAssetForm.quantity);
+    if (!newAssetForm.name.trim()) {
+      setError("이름을 입력해주세요.");
+      return;
+    }
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setError("수량은 1 이상의 정수만 가능합니다.");
+      return;
+    }
+    const isCustom = newAssetForm.asset_type === "custom";
+    const customType = newAssetForm.custom_type.trim();
+    if (isCustom && !customType) {
+      setError("직접 입력 유형을 입력해주세요.");
+      return;
+    }
+    let priceValue = null;
+    if (isCustom) {
+      priceValue = Number(newAssetForm.price_krw);
+      if (!Number.isFinite(priceValue) || priceValue <= 0) {
+        setError("단가는 1 이상의 숫자만 가능합니다.");
+        return;
+      }
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await addAsset({
+        name: newAssetForm.name.trim(),
+        asset_type: isCustom ? customType : newAssetForm.asset_type,
+        symbol: isCustom
+          ? customType
+          : newAssetForm.asset_type === "crypto"
+            ? "BTC"
+            : newAssetForm.asset_type === "cash"
+              ? "CASH"
+              : newAssetForm.symbol.trim().toUpperCase() || newAssetForm.name.trim().toUpperCase(),
+        quantity,
+        ...(priceValue ? { price_krw: priceValue } : {})
+      });
+      setNewAssetForm({ name: "", symbol: "", asset_type: "stock", quantity: 1, custom_type: "", price_krw: "" });
+      setAddingNew(false);
+      await loadSummary();
+      setSuccess("자산이 추가되었습니다.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isCustomType = (value) => !["stock", "crypto", "kr_stock", "cash"].includes(value);
 
   const loadTotals = async (offset = 0, append = false, nextPeriod = period) => {
     setPeriodLoading(true);
@@ -389,14 +508,6 @@ const Dashboard = () => {
         <div className="navbar-actions">
           <button
             className="icon-btn"
-            onClick={onEditAssets}
-            title="자산 관리"
-            type="button"
-          >
-            <i className="fa-solid fa-pen-to-square" />
-          </button>
-          <button
-            className="icon-btn"
             onClick={() => navigate("/settings")}
             title="설정"
             type="button"
@@ -551,14 +662,24 @@ const Dashboard = () => {
 
       <section className="panel">
         <div className="panel-header">
-          <div>
-            <h3>자산 변화</h3>
-            <p className="subtext">
-              자산 추가 및 수정이 반영되지 않았으면 스냅샷 버튼을 클릭하세요.
-              {periodTotals.length > 0 && (
-                <span className="last-snapshot-time"> (최근 스냅샷: {periodTotals[0].period_start})</span>
-              )}
-            </p>
+          <div className="panel-header-left">
+            <div>
+              <h3>자산 변화</h3>
+              <p className="subtext">
+                자산 추가 및 수정이 반영되지 않았으면 스냅샷 버튼을 클릭하세요.
+                {periodTotals.length > 0 && (
+                  <span className="last-snapshot-time"> (최근 스냅샷: {periodTotals[0].period_start})</span>
+                )}
+              </p>
+            </div>
+            <button
+              className="icon-btn"
+              type="button"
+              onClick={() => setAddingNew((prev) => !prev)}
+              title={addingNew ? "추가 닫기" : "자산 추가"}
+            >
+              {addingNew ? <X size={18} /> : <Plus size={18} />}
+            </button>
           </div>
           <input
             type="text"
@@ -578,14 +699,109 @@ const Dashboard = () => {
                     <th>수량</th>
                     <th>현재가(USD)</th>
                     <th>소스</th>
+                    <th>작업</th>
                     {periodTotals.map((row, index) => (
                       <th key={`${row.period_start}-${index}`}>{formatAxisDate(row.period_start)}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
+                  {addingNew && (
+                    <tr className="asset-add-row">
+                      <td className="asset-name-col">
+                        <input
+                          type="text"
+                          className="asset-edit-input"
+                          placeholder="종목명"
+                          value={newAssetForm.name}
+                          onChange={(e) => setNewAssetForm((prev) => ({ ...prev, name: e.target.value }))}
+                        />
+                        <select
+                          className="asset-edit-input"
+                          style={{ marginTop: "0.3rem" }}
+                          value={newAssetForm.asset_type}
+                          onChange={(e) => setNewAssetForm((prev) => ({ ...prev, asset_type: e.target.value }))}
+                        >
+                          <option value="stock">미국 주식</option>
+                          <option value="kr_stock">국내 주식</option>
+                          <option value="crypto">비트코인</option>
+                          <option value="cash">현금</option>
+                          <option value="custom">직접 입력</option>
+                        </select>
+                        {newAssetForm.asset_type === "custom" && (
+                          <input
+                            type="text"
+                            className="asset-edit-input"
+                            style={{ marginTop: "0.3rem" }}
+                            placeholder="유형 (예: 예금)"
+                            value={newAssetForm.custom_type}
+                            onChange={(e) => setNewAssetForm((prev) => ({ ...prev, custom_type: e.target.value }))}
+                          />
+                        )}
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          className="asset-edit-input asset-edit-input-small"
+                          min="1"
+                          step="1"
+                          value={newAssetForm.quantity}
+                          onChange={(e) => setNewAssetForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                        />
+                        {newAssetForm.asset_type === "custom" && (
+                          <input
+                            type="number"
+                            className="asset-edit-input asset-edit-input-small"
+                            style={{ marginTop: "0.3rem" }}
+                            placeholder="단가(원)"
+                            min="1"
+                            value={newAssetForm.price_krw}
+                            onChange={(e) => setNewAssetForm((prev) => ({ ...prev, price_krw: e.target.value }))}
+                          />
+                        )}
+                      </td>
+                      <td>
+                        {["stock", "kr_stock"].includes(newAssetForm.asset_type) && (
+                          <input
+                            type="text"
+                            className="asset-edit-input asset-edit-input-small"
+                            placeholder="심볼"
+                            value={newAssetForm.symbol}
+                            onChange={(e) => setNewAssetForm((prev) => ({ ...prev, symbol: e.target.value }))}
+                          />
+                        )}
+                      </td>
+                      <td>-</td>
+                      <td className="asset-actions-col">
+                        <button
+                          className="icon-btn small"
+                          type="button"
+                          onClick={handleAddAsset}
+                          disabled={saving}
+                          title="추가"
+                        >
+                          <Check size={16} />
+                        </button>
+                        <button
+                          className="icon-btn small"
+                          type="button"
+                          onClick={() => {
+                            setAddingNew(false);
+                            setNewAssetForm({ name: "", symbol: "", asset_type: "stock", quantity: 1, custom_type: "", price_krw: "" });
+                          }}
+                          title="취소"
+                        >
+                          <X size={16} />
+                        </button>
+                      </td>
+                      {periodTotals.map((row, index) => (
+                        <td key={`add-${row.period_start}-${index}`}>-</td>
+                      ))}
+                    </tr>
+                  )}
                   <tr>
                     <td className="asset-name-col">총 자산</td>
+                    <td>-</td>
                     <td>-</td>
                     <td>-</td>
                     <td>-</td>
@@ -601,12 +817,37 @@ const Dashboard = () => {
                   </tr>
                   {filteredTableColumns.map((asset) => {
                     const meta = assetMetaById.get(asset.id);
+                    const isEditing = editingAssetId === asset.id;
                     return (
                       <tr key={asset.id}>
                         <td className="asset-name-col">
-                          {asset.name} <span className="muted">({asset.symbol})</span>
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              className="asset-edit-input"
+                              value={editForm.name}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                            />
+                          ) : (
+                            <>
+                              {asset.name} <span className="muted">({asset.symbol})</span>
+                            </>
+                          )}
                         </td>
-                        <td>{formatQuantity(meta?.quantity)}</td>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              className="asset-edit-input asset-edit-input-small"
+                              min="1"
+                              step="1"
+                              value={editForm.quantity}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                            />
+                          ) : (
+                            formatQuantity(meta?.quantity)
+                          )}
+                        </td>
                         <td>
                           {meta?.last_price_usd
                             ? formatUSD(meta?.last_price_usd)
@@ -614,6 +855,48 @@ const Dashboard = () => {
                         </td>
                         <td className="muted">
                           {meta?.source || "-"}
+                        </td>
+                        <td className="asset-actions-col">
+                          {isEditing ? (
+                            <>
+                              <button
+                                className="icon-btn small"
+                                type="button"
+                                onClick={() => saveEdit(asset.id)}
+                                disabled={saving}
+                                title="저장"
+                              >
+                                <Check size={16} />
+                              </button>
+                              <button
+                                className="icon-btn small"
+                                type="button"
+                                onClick={cancelEdit}
+                                title="취소"
+                              >
+                                <X size={16} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                className="icon-btn small"
+                                type="button"
+                                onClick={() => startEdit(meta || asset)}
+                                title="편집"
+                              >
+                                <Pencil size={16} />
+                              </button>
+                              <button
+                                className="icon-btn small"
+                                type="button"
+                                onClick={() => handleDelete(asset.id, asset.name)}
+                                title="삭제"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
                         </td>
                         {periodTotals.map((row, index) => {
                           const current = (row.assets || []).find((item) => item.id === asset.id);
@@ -633,6 +916,99 @@ const Dashboard = () => {
               </table>
             </div>
             <div className="asset-table-cards">
+              {addingNew && (
+                <article className="asset-change-card asset-add-card">
+                  <div className="asset-add-card-form">
+                    <h4>새 자산 추가</h4>
+                    <label>
+                      종목명
+                      <input
+                        type="text"
+                        placeholder="Apple, Bitcoin"
+                        value={newAssetForm.name}
+                        onChange={(e) => setNewAssetForm((prev) => ({ ...prev, name: e.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      유형
+                      <select
+                        value={newAssetForm.asset_type}
+                        onChange={(e) => setNewAssetForm((prev) => ({ ...prev, asset_type: e.target.value }))}
+                      >
+                        <option value="stock">미국 주식</option>
+                        <option value="kr_stock">국내 주식</option>
+                        <option value="crypto">비트코인</option>
+                        <option value="cash">현금</option>
+                        <option value="custom">직접 입력</option>
+                      </select>
+                    </label>
+                    {newAssetForm.asset_type === "custom" && (
+                      <label>
+                        직접 입력 유형
+                        <input
+                          type="text"
+                          placeholder="예금, IRP 계좌"
+                          value={newAssetForm.custom_type}
+                          onChange={(e) => setNewAssetForm((prev) => ({ ...prev, custom_type: e.target.value }))}
+                        />
+                      </label>
+                    )}
+                    {["stock", "kr_stock"].includes(newAssetForm.asset_type) && (
+                      <label>
+                        심볼
+                        <input
+                          type="text"
+                          placeholder="AAPL"
+                          value={newAssetForm.symbol}
+                          onChange={(e) => setNewAssetForm((prev) => ({ ...prev, symbol: e.target.value }))}
+                        />
+                      </label>
+                    )}
+                    <label>
+                      수량
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={newAssetForm.quantity}
+                        onChange={(e) => setNewAssetForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                      />
+                    </label>
+                    {newAssetForm.asset_type === "custom" && (
+                      <label>
+                        단가(원)
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="10000"
+                          value={newAssetForm.price_krw}
+                          onChange={(e) => setNewAssetForm((prev) => ({ ...prev, price_krw: e.target.value }))}
+                        />
+                      </label>
+                    )}
+                    <div className="asset-add-card-actions">
+                      <button
+                        className="primary small"
+                        type="button"
+                        onClick={handleAddAsset}
+                        disabled={saving}
+                      >
+                        추가
+                      </button>
+                      <button
+                        className="ghost small"
+                        type="button"
+                        onClick={() => {
+                          setAddingNew(false);
+                          setNewAssetForm({ name: "", symbol: "", asset_type: "stock", quantity: 1, custom_type: "", price_krw: "" });
+                        }}
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              )}
               <article className="asset-change-card">
                 <div className="asset-change-header">
                   <div>
@@ -670,22 +1046,91 @@ const Dashboard = () => {
               {filteredTableColumns.map((asset) => {
                 const meta = assetMetaById.get(asset.id) || {};
                 const cardKey = `asset-${asset.id}`;
+                const isEditing = editingAssetId === asset.id;
                 return (
                   <article key={`card-${asset.id}`} className="asset-change-card">
                     <div className="asset-change-header">
-                      <div>
-                        <h4>
-                          {asset.name} <span className="muted">({asset.symbol})</span>
-                          {meta.source && (
-                            <span className="source-badge muted">
-                              {meta.source}
-                            </span>
-                          )}
-                        </h4>
-                        <p className="asset-change-meta">
-                          보유 {formatQuantity(meta.quantity)} ·{" "}
-                          {meta.last_price_usd ? formatUSD(meta.last_price_usd) : "USD -"}
-                        </p>
+                      <div style={{ flex: 1 }}>
+                        {isEditing ? (
+                          <>
+                            <input
+                              type="text"
+                              className="asset-edit-input"
+                              value={editForm.name}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                              style={{ marginBottom: "0.5rem" }}
+                            />
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              <span className="muted">수량:</span>
+                              <input
+                                type="number"
+                                className="asset-edit-input"
+                                style={{ width: "80px" }}
+                                min="1"
+                                step="1"
+                                value={editForm.quantity}
+                                onChange={(e) => setEditForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <h4>
+                              {asset.name} <span className="muted">({asset.symbol})</span>
+                              {meta.source && (
+                                <span className="source-badge muted">
+                                  {meta.source}
+                                </span>
+                              )}
+                            </h4>
+                            <p className="asset-change-meta">
+                              보유 {formatQuantity(meta.quantity)} ·{" "}
+                              {meta.last_price_usd ? formatUSD(meta.last_price_usd) : "USD -"}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                      <div className="asset-card-actions">
+                        {isEditing ? (
+                          <>
+                            <button
+                              className="icon-btn small"
+                              type="button"
+                              onClick={() => saveEdit(asset.id)}
+                              disabled={saving}
+                              title="저장"
+                            >
+                              <Check size={16} />
+                            </button>
+                            <button
+                              className="icon-btn small"
+                              type="button"
+                              onClick={cancelEdit}
+                              title="취소"
+                            >
+                              <X size={16} />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              className="icon-btn small"
+                              type="button"
+                              onClick={() => startEdit(meta)}
+                              title="편집"
+                            >
+                              <Pencil size={16} />
+                            </button>
+                            <button
+                              className="icon-btn small"
+                              type="button"
+                              onClick={() => handleDelete(asset.id, asset.name)}
+                              title="삭제"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="asset-change-body">
