@@ -662,24 +662,14 @@ const Dashboard = () => {
 
       <section className="panel">
         <div className="panel-header">
-          <div className="panel-header-left">
-            <div>
-              <h3>자산 변화</h3>
-              <p className="subtext">
-                자산 추가 및 수정이 반영되지 않았으면 스냅샷 버튼을 클릭하세요.
-                {periodTotals.length > 0 && (
-                  <span className="last-snapshot-time"> (최근 스냅샷: {periodTotals[0].period_start})</span>
-                )}
-              </p>
-            </div>
-            <button
-              className="icon-btn"
-              type="button"
-              onClick={() => setAddingNew((prev) => !prev)}
-              title={addingNew ? "추가 닫기" : "자산 추가"}
-            >
-              {addingNew ? <X size={18} /> : <Plus size={18} />}
-            </button>
+          <div>
+            <h3>자산 변화</h3>
+            <p className="subtext">
+              자산 추가 및 수정이 반영되지 않았으면 스냅샷 버튼을 클릭하세요.
+              {periodTotals.length > 0 && (
+                <span className="last-snapshot-time"> (최근 스냅샷: {periodTotals[0].period_start})</span>
+              )}
+            </p>
           </div>
           <input
             type="text"
