@@ -35,10 +35,13 @@ port_in_use() {
 kill_port() {
   local port="$1"
   local pids=""
+  echo "[DEBUG] Checking port ${port}..."
   if command -v lsof >/dev/null 2>&1; then
     pids=$(lsof -ti tcp:"${port}" 2>/dev/null || true)
+    echo "[DEBUG] lsof found PIDs: '${pids}'"
   elif command -v ss >/dev/null 2>&1; then
-    pids=$(ss -ltnp 2>/dev/null | awk -v port=":${port}" '$0 ~ port {print $NF}' | sed -E 's/.*pid=([0-9]+).*/\\1/' | sort -u)
+    pids=$(ss -ltnp 2>/dev/null | awk -v port=":${port}" '$0 ~ port {print $NF}' | sed -E 's/.*pid=([0-9]+).*/\1/' | sort -u)
+    echo "[DEBUG] ss found PIDs: '${pids}'"
   fi
   if [[ -n "${pids}" ]]; then
     echo "Stopping process on port ${port}: ${pids}"
@@ -49,12 +52,15 @@ kill_port() {
         echo "Port ${port} is now free."
         return 0
       fi
+      echo "[DEBUG] Waiting for port ${port} to be released... (${i}/10)"
       sleep 1
     done
     # 여전히 사용 중이면 강제 종료
     echo "Force killing process on port ${port}..."
     kill -9 ${pids} 2>/dev/null || true
-    sleep 1
+    sleep 2
+  else
+    echo "[DEBUG] No process found on port ${port}"
   fi
 }
 
