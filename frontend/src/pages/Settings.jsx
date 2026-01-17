@@ -150,14 +150,6 @@ const Settings = () => {
           </button>
           <button
             className="icon-btn"
-            onClick={() => navigate("/edit-assets")}
-            title="자산 관리"
-            type="button"
-          >
-            <i className="fa-solid fa-pen-to-square" />
-          </button>
-          <button
-            className="icon-btn"
             onClick={onLogout}
             title="로그아웃"
             type="button"
