@@ -71,7 +71,15 @@ def ensure_assets_columns():
             conn.execute(text("ALTER TABLE assets ADD COLUMN last_source VARCHAR(50)"))
 
 
+def ensure_daily_totals_columns():
+    with engine.begin() as conn:
+        columns = [row[1] for row in conn.execute(text("PRAGMA table_info(daily_totals)"))]
+        if "snapshot_at" not in columns:
+            conn.execute(text("ALTER TABLE daily_totals ADD COLUMN snapshot_at DATETIME"))
+
+
 ensure_assets_columns()
+ensure_daily_totals_columns()
 
 app = FastAPI()
 security = HTTPBearer()
