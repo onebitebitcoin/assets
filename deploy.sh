@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
+# -e 제거: 개별 명령어 실패 시 스크립트가 종료되지 않도록 함
+# 대신 중요한 단계에서 명시적으로 에러 체크
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_PORT=50001
@@ -97,10 +99,17 @@ if [[ ! -x "${VENV_PIP}" ]]; then
   echo "Missing .venv/bin/pip. Recreate the venv." >&2
   exit 1
 fi
-"${VENV_PIP}" install -r backend/requirements.txt
+echo "[DEBUG] Installing backend dependencies..."
+if ! "${VENV_PIP}" install -r backend/requirements.txt; then
+  echo "ERROR: Failed to install backend dependencies" >&2
+  exit 1
+fi
 
 echo "Installing frontend deps..."
-npm --prefix frontend install
+if ! npm --prefix frontend install; then
+  echo "ERROR: Failed to install frontend dependencies" >&2
+  exit 1
+fi
 
 LOG_DIR="${ROOT_DIR}/logs"
 mkdir -p "${LOG_DIR}"
@@ -109,10 +118,29 @@ mkdir -p "${PID_DIR}"
 
 # 백엔드 시작
 echo "Starting backend on port ${BACKEND_PORT}..."
-nohup "${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${BACKEND_PORT}" > "${ROOT_DIR}/backend/debug.log" 2>&1 &
+echo "[DEBUG] Command: ${VENV_UVICORN} backend.main:app --host 127.0.0.1 --port ${BACKEND_PORT}"
+echo "[DEBUG] Working directory: $(pwd)"
+echo "[DEBUG] Log file: ${ROOT_DIR}/backend/debug.log"
+
+# 로그 파일 초기화
+echo "=== Backend started at $(date) ===" > "${ROOT_DIR}/backend/debug.log"
+
+cd "${ROOT_DIR}"
+nohup "${VENV_UVICORN}" backend.main:app --host 127.0.0.1 --port "${BACKEND_PORT}" >> "${ROOT_DIR}/backend/debug.log" 2>&1 &
 BACKEND_PID=$!
 echo "${BACKEND_PID}" > "${PID_DIR}/backend.pid"
-disown "${BACKEND_PID}"
+disown "${BACKEND_PID}" 2>/dev/null || true
+echo "[DEBUG] Backend PID: ${BACKEND_PID}"
+
+# 프로세스가 실제로 시작되었는지 확인 (1초 대기 후)
+sleep 2
+if ! kill -0 "${BACKEND_PID}" 2>/dev/null; then
+  echo "ERROR: Backend process (${BACKEND_PID}) died immediately after start" >&2
+  echo "=== Backend log ===" >&2
+  tail -20 "${ROOT_DIR}/backend/debug.log" >&2
+  exit 1
+fi
+echo "[DEBUG] Backend process is running"
 
 # 백엔드 헬스 체크 대기
 backend_ready=false
@@ -122,11 +150,21 @@ for i in {1..60}; do
     echo "Backend is ready! (${i}s)"
     break
   fi
+  # 프로세스가 여전히 실행 중인지 확인
+  if ! kill -0 "${BACKEND_PID}" 2>/dev/null; then
+    echo "ERROR: Backend process died during startup" >&2
+    echo "=== Backend log ===" >&2
+    tail -30 "${ROOT_DIR}/backend/debug.log" >&2
+    exit 1
+  fi
+  echo "[DEBUG] Waiting for backend... (${i}/60)"
   sleep 1
 done
 
 if [[ "${backend_ready}" != "true" ]]; then
-  echo "ERROR: Backend failed to start" >&2
+  echo "ERROR: Backend failed to respond within 60 seconds" >&2
+  echo "=== Backend log ===" >&2
+  tail -30 "${ROOT_DIR}/backend/debug.log" >&2
   kill "${BACKEND_PID}" 2>/dev/null || true
   exit 1
 fi
@@ -134,11 +172,27 @@ fi
 echo "Backend started with PID ${BACKEND_PID}"
 
 echo "Starting frontend on ${FRONTEND_PORT}..."
+echo "[DEBUG] VITE_API_BASE: ${VITE_API_BASE:-https://ubuntu.golden-ghost.ts.net:8443/api}"
+
+# 로그 파일 초기화
+echo "=== Frontend started at $(date) ===" > "${ROOT_DIR}/frontend/debug.log"
+
 VITE_API_BASE="${VITE_API_BASE:-https://ubuntu.golden-ghost.ts.net:8443/api}" \
-  nohup npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" --strictPort > "${ROOT_DIR}/frontend/debug.log" 2>&1 &
+  nohup npm --prefix "${ROOT_DIR}/frontend" run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" --strictPort >> "${ROOT_DIR}/frontend/debug.log" 2>&1 &
 FRONTEND_PID=$!
 echo "${FRONTEND_PID}" > "${PID_DIR}/frontend.pid"
-disown "${FRONTEND_PID}"
+disown "${FRONTEND_PID}" 2>/dev/null || true
+echo "[DEBUG] Frontend PID: ${FRONTEND_PID}"
+
+# 프로세스가 실제로 시작되었는지 확인
+sleep 2
+if ! kill -0 "${FRONTEND_PID}" 2>/dev/null; then
+  echo "ERROR: Frontend process (${FRONTEND_PID}) died immediately after start" >&2
+  echo "=== Frontend log ===" >&2
+  tail -20 "${ROOT_DIR}/frontend/debug.log" >&2
+  exit 1
+fi
+echo "[DEBUG] Frontend process is running"
 echo "Frontend started with PID ${FRONTEND_PID} (detached)"
 
 echo "Waiting for frontend to be ready..."
@@ -147,6 +201,15 @@ for i in {1..30}; do
     echo "Frontend is ready! (${i}s)"
     break
   fi
+  # 프로세스가 여전히 실행 중인지 확인
+  if ! kill -0 "${FRONTEND_PID}" 2>/dev/null; then
+    echo "WARNING: Frontend process died during startup" >&2
+    echo "=== Frontend log ===" >&2
+    tail -20 "${ROOT_DIR}/frontend/debug.log" >&2
+    # 프론트엔드 실패는 경고만 출력하고 계속 진행 (백엔드는 이미 실행 중)
+    break
+  fi
+  echo "[DEBUG] Waiting for frontend... (${i}/30)"
   sleep 1
 done
 
