@@ -34,6 +34,8 @@ class PriceResult:
     price_krw: float
     source: str
     price_usd: Optional[float] = None
+    previous_close_usd: Optional[float] = None
+    price_change_pct: Optional[float] = None
 
 
 async def fetch_usd_krw_rate(client: httpx.AsyncClient) -> float:
@@ -69,8 +71,12 @@ async def fetch_usd_krw_rate(client: httpx.AsyncClient) -> float:
     return rate
 
 
-async def _fetch_from_finnhub(symbol: str, client: httpx.AsyncClient) -> float:
-    """Finnhub API에서 미국주식 가격 조회 (실시간)"""
+async def _fetch_from_finnhub(symbol: str, client: httpx.AsyncClient) -> tuple[float, Optional[float]]:
+    """Finnhub API에서 미국주식 가격 조회 (실시간)
+
+    Returns:
+        (current_price, previous_close) 튜플
+    """
     if not settings.finnhub_api_key:
         raise ValueError("FINNHUB_API_KEY is not configured")
 
@@ -89,8 +95,11 @@ async def _fetch_from_finnhub(symbol: str, client: httpx.AsyncClient) -> float:
         raise ValueError(f"No price data for {symbol} from Finnhub")
 
     price = float(price)
-    logger.debug("Finnhub price for %s: %.2f USD", symbol, price)
-    return price
+    previous_close = data.get("pc")
+    if previous_close:
+        previous_close = float(previous_close)
+    logger.debug("Finnhub price for %s: %.2f USD (prev: %s)", symbol, price, previous_close)
+    return price, previous_close
 
 
 async def _fetch_from_stooq(symbol: str, client: httpx.AsyncClient) -> float:
@@ -150,7 +159,7 @@ async def _fetch_from_yahoo(symbol: str, client: httpx.AsyncClient) -> float:
 
 async def _fetch_stocks_from_finnhub_batch(
     symbols: list[str], client: httpx.AsyncClient
-) -> dict[str, tuple[float, str]]:
+) -> dict[str, tuple[float, str, Optional[float], Optional[float]]]:
     """Finnhub API에서 여러 종목을 병렬로 조회 (Finnhub은 배치 API 미지원)
 
     Args:
@@ -158,34 +167,42 @@ async def _fetch_stocks_from_finnhub_batch(
         client: httpx.AsyncClient
 
     Returns:
-        {symbol: (price, source)} 딕셔너리. 실패한 종목은 포함되지 않음.
+        {symbol: (price, source, previous_close, price_change_pct)} 딕셔너리.
+        실패한 종목은 포함되지 않음.
     """
-    results: dict[str, tuple[float, str]] = {}
+    results: dict[str, tuple[float, str, Optional[float], Optional[float]]] = {}
 
-    async def fetch_single(symbol: str) -> tuple[str, float | None]:
+    async def fetch_single(symbol: str) -> tuple[str, float | None, float | None]:
         try:
-            price = await _fetch_from_finnhub(symbol, client)
-            return (symbol, price)
+            price, previous_close = await _fetch_from_finnhub(symbol, client)
+            return (symbol, price, previous_close)
         except Exception as exc:
             logger.debug("Finnhub failed for %s: %s", symbol, exc)
-            return (symbol, None)
+            return (symbol, None, None)
 
     tasks = [fetch_single(symbol) for symbol in symbols]
     responses = await asyncio.gather(*tasks)
 
-    for symbol, price in responses:
+    for symbol, price, previous_close in responses:
         if price is not None:
-            results[symbol] = (price, "finnhub")
+            price_change_pct = None
+            if previous_close and previous_close > 0:
+                price_change_pct = (price - previous_close) / previous_close * 100
+            results[symbol] = (price, "finnhub", previous_close, price_change_pct)
             _set_cache(f"stock:{symbol}", price)
-            logger.debug("Finnhub price for %s: %.2f USD", symbol, price)
+            logger.debug("Finnhub price for %s: %.2f USD (change: %s%%)", symbol, price, price_change_pct)
 
     return results
 
 
 async def _fetch_stocks_from_yahoo_batch(
     symbols: list[str], client: httpx.AsyncClient
-) -> dict[str, tuple[float, str]]:
-    """Yahoo Finance API에서 여러 미국주식 가격을 한 번에 조회 (v7 quote API)"""
+) -> dict[str, tuple[float, str, Optional[float], Optional[float]]]:
+    """Yahoo Finance API에서 여러 미국주식 가격을 한 번에 조회 (v7 quote API)
+
+    Returns:
+        {symbol: (price, source, previous_close, price_change_pct)} 딕셔너리.
+    """
     if not symbols:
         return {}
 
@@ -193,7 +210,7 @@ async def _fetch_stocks_from_yahoo_batch(
     params = {"symbols": ",".join(symbols)}
     logger.debug("Fetching stock prices from Yahoo Finance batch API: %s", symbols)
 
-    results: dict[str, tuple[float, str]] = {}
+    results: dict[str, tuple[float, str, Optional[float], Optional[float]]] = {}
 
     try:
         response = await client.get(url, params=params, timeout=15)
@@ -206,10 +223,16 @@ async def _fetch_stocks_from_yahoo_batch(
         for quote in quotes:
             symbol = quote.get("symbol")
             price = quote.get("regularMarketPrice")
+            previous_close = quote.get("regularMarketPreviousClose")
             if symbol and price is not None:
-                results[symbol] = (float(price), "yahoo")
-                _set_cache(f"stock:{symbol}", float(price))
-                logger.debug("Yahoo Finance batch price for %s: %.2f USD", symbol, price)
+                price = float(price)
+                prev_close = float(previous_close) if previous_close else None
+                price_change_pct = None
+                if prev_close and prev_close > 0:
+                    price_change_pct = (price - prev_close) / prev_close * 100
+                results[symbol] = (price, "yahoo", prev_close, price_change_pct)
+                _set_cache(f"stock:{symbol}", price)
+                logger.debug("Yahoo Finance batch price for %s: %.2f USD (change: %s%%)", symbol, price, price_change_pct)
 
     except Exception as exc:
         logger.warning("Yahoo Finance batch API failed: %s", exc)
@@ -219,7 +242,7 @@ async def _fetch_stocks_from_yahoo_batch(
 
 async def fetch_stocks_usd_prices_batch(
     symbols: list[str], client: httpx.AsyncClient
-) -> dict[str, tuple[float, str]]:
+) -> dict[str, tuple[float, str, Optional[float], Optional[float]]]:
     """여러 미국주식 가격을 조회 (Finnhub 1차 -> Yahoo 2차 fallback)
 
     Args:
@@ -227,12 +250,13 @@ async def fetch_stocks_usd_prices_batch(
         client: httpx.AsyncClient
 
     Returns:
-        {symbol: (price, source)} 딕셔너리. 실패한 종목은 포함되지 않음.
+        {symbol: (price, source, previous_close, price_change_pct)} 딕셔너리.
+        실패한 종목은 포함되지 않음.
     """
     if not symbols:
         return {}
 
-    results: dict[str, tuple[float, str]] = {}
+    results: dict[str, tuple[float, str, Optional[float], Optional[float]]] = {}
 
     # 1차: Finnhub API (병렬 조회)
     if settings.finnhub_api_key:
@@ -264,18 +288,22 @@ async def fetch_stocks_usd_prices_batch(
     return results
 
 
-async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> tuple[float, str]:
+async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> tuple[float, str, Optional[float], Optional[float]]:
     """미국주식 USD 가격 조회 (Finnhub 1차, Yahoo 2차, Stooq 3차)
 
     Returns:
-        (price, source) 튜플. source는 "finnhub", "yahoo", "stooq", "cache" 중 하나.
+        (price, source, previous_close, price_change_pct) 튜플.
+        source는 "finnhub", "yahoo", "stooq", "cache" 중 하나.
     """
     # 1차: Finnhub API (실시간 가격)
     if settings.finnhub_api_key:
         try:
-            price = await _fetch_from_finnhub(symbol, client)
+            price, previous_close = await _fetch_from_finnhub(symbol, client)
             _set_cache(f"stock:{symbol}", price)
-            return price, "finnhub"
+            price_change_pct = None
+            if previous_close and previous_close > 0:
+                price_change_pct = (price - previous_close) / previous_close * 100
+            return price, "finnhub", previous_close, price_change_pct
         except Exception as exc:
             logger.warning("Finnhub failed for %s: %s, trying Yahoo", symbol, exc)
     else:
@@ -285,7 +313,7 @@ async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> tuple
     try:
         price = await _fetch_from_yahoo(symbol, client)
         _set_cache(f"stock:{symbol}", price)
-        return price, "yahoo"
+        return price, "yahoo", None, None
     except Exception as exc:
         logger.warning("Yahoo Finance failed for %s: %s, trying Stooq", symbol, exc)
 
@@ -293,7 +321,7 @@ async def fetch_stock_usd_price(symbol: str, client: httpx.AsyncClient) -> tuple
     try:
         price = await _fetch_from_stooq(symbol, client)
         _set_cache(f"stock:{symbol}", price)
-        return price, "stooq"
+        return price, "stooq", None, None
     except Exception as exc:
         logger.error("All sources failed for %s: %s", symbol, exc)
         raise ValueError(f"All price sources failed for {symbol}")
@@ -343,12 +371,14 @@ async def get_price_krw(symbol: str, asset_type: str) -> PriceResult:
     async with httpx.AsyncClient() as client:
         if asset_type == "stock":
             try:
-                usd_price, price_source = await fetch_stock_usd_price(symbol, client)
+                usd_price, price_source, previous_close, price_change_pct = await fetch_stock_usd_price(symbol, client)
                 rate = await fetch_usd_krw_rate(client)
                 return PriceResult(
                     price_krw=usd_price * rate,
                     source=price_source,
                     price_usd=usd_price,
+                    previous_close_usd=previous_close,
+                    price_change_pct=price_change_pct,
                 )
             except (httpx.HTTPError, ValueError) as exc:
                 cached = _get_cached(f"stock:{symbol}", allow_stale=True)
@@ -455,7 +485,7 @@ async def get_price_krw_batch(assets: list[tuple[str, str]]) -> dict[str, PriceR
             other_assets.append((symbol, asset_type))
 
     async with httpx.AsyncClient() as client:
-        # 1. 미국 주식: Yahoo Finance 배치 API로 한 번에 조회
+        # 1. 미국 주식: 배치 API로 한 번에 조회
         if us_stock_symbols:
             batch_prices = await fetch_stocks_usd_prices_batch(us_stock_symbols, client)
 
@@ -466,11 +496,13 @@ async def get_price_krw_batch(assets: list[tuple[str, str]]) -> dict[str, PriceR
             rate = await fetch_usd_krw_rate(client)
 
             # 배치 성공한 종목 결과 저장
-            for symbol, (usd_price, source) in batch_prices.items():
+            for symbol, (usd_price, source, previous_close, price_change_pct) in batch_prices.items():
                 results[symbol] = PriceResult(
                     price_krw=usd_price * rate,
                     source=source,
                     price_usd=usd_price,
+                    previous_close_usd=previous_close,
+                    price_change_pct=price_change_pct,
                 )
 
             # 배치 실패한 종목은 Stooq fallback

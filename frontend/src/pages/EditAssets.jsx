@@ -192,6 +192,7 @@ const EditAssets = () => {
     setError("");
     setSuccess("");
     try {
+      const asset = assets.find((a) => a.id === assetId);
       const updated = await refreshAsset(assetId);
       setAssets((prev) =>
         sortAssets(
@@ -199,7 +200,8 @@ const EditAssets = () => {
           sortMode
         )
       );
-      setSuccess("가격이 업데이트되었습니다.");
+      const sourceText = updated.source ? ` (${updated.source})` : "";
+      setSuccess(`${asset?.name || "자산"} 가격이 업데이트되었습니다.${sourceText}`);
     } catch (err) {
       setError(err.message);
     } finally {

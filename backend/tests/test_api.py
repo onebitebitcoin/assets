@@ -49,6 +49,8 @@ def test_asset_crud_and_summary(client, monkeypatch):
         class Price:
             price_krw = 1000.0
             price_usd = 1.0
+            source = "yahoo"
+            price_change_pct = 1.5
 
         return Price()
 
@@ -56,6 +58,8 @@ def test_asset_crud_and_summary(client, monkeypatch):
         class Price:
             price_krw = 1000.0
             price_usd = 1.0
+            source = "yahoo"
+            price_change_pct = 1.5
         return {symbol: Price() for symbol, _ in assets}
 
     monkeypatch.setattr("backend.main.get_price_krw", fake_price)

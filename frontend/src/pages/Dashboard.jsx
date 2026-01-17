@@ -79,7 +79,20 @@ const Dashboard = () => {
       if (data.errors && data.errors.length > 0) {
         setError(data.errors.join(", "));
       } else {
-        setSuccess("가격이 업데이트되었습니다.");
+        // source별 개수 집계
+        const sourceCounts = {};
+        (data.assets || []).forEach((asset) => {
+          if (asset.source) {
+            sourceCounts[asset.source] = (sourceCounts[asset.source] || 0) + 1;
+          }
+        });
+        const sourceText = Object.entries(sourceCounts)
+          .map(([source, count]) => `${source}: ${count}`)
+          .join(", ");
+        const successMsg = sourceText
+          ? `가격이 업데이트되었습니다. (${sourceText})`
+          : "가격이 업데이트되었습니다.";
+        setSuccess(successMsg);
       }
     } catch (err) {
       setError(err.message);
@@ -250,6 +263,17 @@ const Dashboard = () => {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2
     }).format(rounded);
+  };
+  const formatPriceChange = (value) => {
+    if (value === null || value === undefined) return null;
+    const sign = value >= 0 ? "+" : "";
+    return `${sign}${value.toFixed(2)}%`;
+  };
+  const getPriceChangeClass = (value) => {
+    if (value === null || value === undefined) return "";
+    if (value > 0) return "delta-up";
+    if (value < 0) return "delta-down";
+    return "";
   };
   const chartLabels = chartSeries.map((item) => formatAxisDate(item.period_start));
   const chartData = {
@@ -559,6 +583,7 @@ const Dashboard = () => {
                     <th className="asset-name-col">종목</th>
                     <th>수량</th>
                     <th>현재가(USD)</th>
+                    <th>전일비</th>
                     {periodTotals.map((row, index) => (
                       <th key={`${row.period_start}-${index}`}>{formatAxisDate(row.period_start)}</th>
                     ))}
@@ -567,6 +592,7 @@ const Dashboard = () => {
                 <tbody>
                   <tr>
                     <td className="asset-name-col">총 자산</td>
+                    <td>-</td>
                     <td>-</td>
                     <td>-</td>
                     {periodTotals.map((row, index) => {
@@ -579,30 +605,37 @@ const Dashboard = () => {
                       );
                     })}
                   </tr>
-                  {filteredTableColumns.map((asset) => (
-                    <tr key={asset.id}>
-                      <td className="asset-name-col">
-                        {asset.name} <span className="muted">({asset.symbol})</span>
-                      </td>
-                      <td>{formatQuantity(assetMetaById.get(asset.id)?.quantity)}</td>
-                      <td>
-                        {assetMetaById.get(asset.id)?.last_price_usd
-                          ? formatUSD(assetMetaById.get(asset.id)?.last_price_usd)
-                          : "-"}
-                      </td>
-                      {periodTotals.map((row, index) => {
-                        const current = (row.assets || []).find((item) => item.id === asset.id);
-                        const prev = periodTotals[index + 1];
-                        const prevAsset = prev?.assets?.find((item) => item.id === asset.id);
-                        const assetClass = getDeltaClass(current?.total_krw, prevAsset?.total_krw);
-                        return (
-                          <td key={`${asset.id}-${row.period_start}-${index}`} className={assetClass}>
-                            {formatKRW(current?.total_krw || 0)}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                  {filteredTableColumns.map((asset) => {
+                    const meta = assetMetaById.get(asset.id);
+                    const priceChange = meta?.price_change_pct;
+                    return (
+                      <tr key={asset.id}>
+                        <td className="asset-name-col">
+                          {asset.name} <span className="muted">({asset.symbol})</span>
+                        </td>
+                        <td>{formatQuantity(meta?.quantity)}</td>
+                        <td>
+                          {meta?.last_price_usd
+                            ? formatUSD(meta?.last_price_usd)
+                            : "-"}
+                        </td>
+                        <td className={getPriceChangeClass(priceChange)}>
+                          {formatPriceChange(priceChange) || "-"}
+                        </td>
+                        {periodTotals.map((row, index) => {
+                          const current = (row.assets || []).find((item) => item.id === asset.id);
+                          const prev = periodTotals[index + 1];
+                          const prevAsset = prev?.assets?.find((item) => item.id === asset.id);
+                          const assetClass = getDeltaClass(current?.total_krw, prevAsset?.total_krw);
+                          return (
+                            <td key={`${asset.id}-${row.period_start}-${index}`} className={assetClass}>
+                              {formatKRW(current?.total_krw || 0)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -644,12 +677,18 @@ const Dashboard = () => {
               {filteredTableColumns.map((asset) => {
                 const meta = assetMetaById.get(asset.id) || {};
                 const cardKey = `asset-${asset.id}`;
+                const priceChange = meta.price_change_pct;
                 return (
                   <article key={`card-${asset.id}`} className="asset-change-card">
                     <div className="asset-change-header">
                       <div>
                         <h4>
                           {asset.name} <span className="muted">({asset.symbol})</span>
+                          {formatPriceChange(priceChange) && (
+                            <span className={`price-change-badge ${getPriceChangeClass(priceChange)}`}>
+                              {formatPriceChange(priceChange)}
+                            </span>
+                          )}
                         </h4>
                         <p className="asset-change-meta">
                           보유 {formatQuantity(meta.quantity)} ·{" "}

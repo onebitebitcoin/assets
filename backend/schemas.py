@@ -48,12 +48,13 @@ class AssetOut(BaseModel):
 
 class AssetRefreshOut(AssetOut):
     source: Optional[str] = None
+    price_change_pct: Optional[float] = None
 
 
 class SummaryOut(BaseModel):
     total_krw: float
     daily_change_krw: float
-    assets: list[AssetOut]
+    assets: list[AssetRefreshOut]
     errors: Optional[list[str]] = None
     last_refreshed: Optional[datetime] = None
     next_refresh_at: Optional[datetime] = None
