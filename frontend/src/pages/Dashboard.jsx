@@ -21,7 +21,7 @@ import {
   snapshotTotals,
   updateAsset
 } from "../api.js";
-import { formatDelta, formatKRW, formatRelativeTime, formatUSD } from "../utils/format.js";
+import { formatDateTime, formatDelta, formatKRW, formatRelativeTime, formatUSD } from "../utils/format.js";
 
 ChartJS.register(
   ArcElement,
@@ -670,7 +670,7 @@ const Dashboard = () => {
             <p className="subtext">
               자산 추가 및 수정이 반영되지 않았으면 스냅샷 버튼을 클릭하세요.
               {periodTotals.length > 0 && (
-                <span className="last-snapshot-time"> (최근 스냅샷: {periodTotals[0].period_start})</span>
+                <span className="last-snapshot-time"> (최근 스냅샷: {formatDateTime(periodTotals[0].period_start)})</span>
               )}
             </p>
           </div>

@@ -51,3 +51,18 @@ export const formatRelativeTime = (dateString) => {
   if (diffHour < 24) return `${diffHour}시간 전`;
   return `${Math.floor(diffHour / 24)}일 전`;
 };
+
+export const formatDateTime = (dateString) => {
+  if (!dateString) return "-";
+  const raw = typeof dateString === "string" ? dateString : dateString.toString();
+  const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
+  const date = new Date(hasTimezone ? raw : `${raw}+09:00`);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Seoul"
+  }).format(date);
+};
