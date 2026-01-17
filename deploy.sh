@@ -43,6 +43,17 @@ kill_port() {
   if [[ -n "${pids}" ]]; then
     echo "Stopping process on port ${port}: ${pids}"
     kill ${pids} 2>/dev/null || true
+    # 포트가 해제될 때까지 대기 (최대 10초)
+    for i in {1..10}; do
+      if ! port_in_use "${port}"; then
+        echo "Port ${port} is now free."
+        return 0
+      fi
+      sleep 1
+    done
+    # 여전히 사용 중이면 강제 종료
+    echo "Force killing process on port ${port}..."
+    kill -9 ${pids} 2>/dev/null || true
     sleep 1
   fi
 }
