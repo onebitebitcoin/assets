@@ -109,7 +109,7 @@ echo "Backend started with PID ${BACKEND_PID} (detached)"
 
 echo "Starting frontend on ${FRONTEND_PORT}..."
 VITE_API_BASE="${VITE_API_BASE:-https://ubuntu.golden-ghost.ts.net:8443/api}" \
-  nohup npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" > "${ROOT_DIR}/frontend/debug.log" 2>&1 &
+  nohup npm --prefix frontend run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT}" --strictPort > "${ROOT_DIR}/frontend/debug.log" 2>&1 &
 FRONTEND_PID=$!
 echo "${FRONTEND_PID}" > "${PID_DIR}/frontend.pid"
 disown "${FRONTEND_PID}"
