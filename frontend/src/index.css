@@ -755,6 +755,29 @@ button:disabled {
   white-space: nowrap;
 }
 
+.asset-table .asset-name-col:has(.asset-edit-name-group) {
+  overflow: visible;
+  white-space: normal;
+  max-width: 280px;
+  width: 280px;
+}
+
+.asset-edit-name-group {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.asset-edit-name-group .asset-edit-input:first-child {
+  flex: 1;
+  min-width: 100px;
+}
+
+.asset-edit-name-group .asset-edit-input-small {
+  width: 70px;
+  flex-shrink: 0;
+}
+
 .asset-table thead th {
   color: #cbd5f5;
   font-size: 0.8rem;

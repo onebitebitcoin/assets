@@ -829,7 +829,6 @@ const Dashboard = () => {
                                 value={editForm.symbol}
                                 onChange={(e) => setEditForm((prev) => ({ ...prev, symbol: e.target.value }))}
                                 placeholder="티커"
-                                style={{ marginTop: "0.3rem" }}
                               />
                             </div>
                           ) : (
