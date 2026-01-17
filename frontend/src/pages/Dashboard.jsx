@@ -631,7 +631,7 @@ const Dashboard = () => {
             <p className="subtext">
               자산 추가 및 수정이 반영되지 않았으면 스냅샷 버튼을 클릭하세요.
               {periodTotals.length > 0 && (
-                <span className="last-snapshot-time"> (최근 스냅샷: {formatDateTime(periodTotals[0].period_start)})</span>
+                <span className="last-snapshot-time"> (최근 스냅샷: {formatDateTime(periodTotals[0].snapshot_at || periodTotals[0].period_start)})</span>
               )}
             </p>
           </div>

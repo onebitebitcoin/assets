@@ -42,6 +42,7 @@ class DailyTotal(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     day: Mapped[date] = mapped_column(Date)
     total_krw: Mapped[float] = mapped_column(Float)
+    snapshot_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
 
     user: Mapped[User] = relationship(back_populates="totals")
 

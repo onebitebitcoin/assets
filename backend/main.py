@@ -459,6 +459,7 @@ def get_totals_detail(
                 period_end=info["period_end"],
                 total_krw=info["total_krw"],
                 assets=asset_values,
+                snapshot_at=info.get("snapshot_at"),
             )
         )
     return TotalsDetailOut(assets=asset_columns, points=points)
@@ -543,12 +544,13 @@ async def snapshot_totals(
                 logger.warning("[Snapshot] Price fetch failed for %s, using existing price", symbol)
 
     # 스냅샷 저장
-    upsert_daily_total(db, user.id, total, today)
+    snapshot_time = now_seoul()
+    upsert_daily_total(db, user.id, total, today, snapshot_at=snapshot_time)
     for asset, total_krw in asset_totals:
         upsert_daily_asset_total(db, user.id, asset.id, total_krw, today)
     db.commit()
 
-    logger.info("[Snapshot] Saved for user %d: %.0f KRW on %s", user.id, total, today)
+    logger.info("[Snapshot] Saved for user %d: %.0f KRW on %s at %s", user.id, total, today, snapshot_time)
     return TotalPointOut(period_start=today, period_end=today, total_krw=total)
 
 
@@ -586,14 +588,16 @@ def compute_asset_totals(user_id: int, db: Session) -> list[tuple[Asset, float]]
     return totals
 
 
-def upsert_daily_total(db: Session, user_id: int, total: float, day: date) -> None:
+def upsert_daily_total(db: Session, user_id: int, total: float, day: date, snapshot_at: datetime | None = None) -> None:
     existing = db.scalar(
         select(DailyTotal).where(and_(DailyTotal.user_id == user_id, DailyTotal.day == day))
     )
     if existing:
         existing.total_krw = total
+        if snapshot_at:
+            existing.snapshot_at = snapshot_at
     else:
-        db.add(DailyTotal(user_id=user_id, day=day, total_krw=total))
+        db.add(DailyTotal(user_id=user_id, day=day, total_krw=total, snapshot_at=snapshot_at))
 
 
 def upsert_daily_asset_total(
@@ -672,6 +676,7 @@ def build_period_detail_points(rows: list[DailyTotal], period: str) -> list[dict
                 "period_start": period_start,
                 "period_end": period_end,
                 "total_krw": row.total_krw,
+                "snapshot_at": row.snapshot_at,
             }
         )
     return points

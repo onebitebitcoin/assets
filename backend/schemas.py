@@ -81,6 +81,7 @@ class TotalPointDetailOut(BaseModel):
     period_end: date
     total_krw: float
     assets: list[AssetValueOut]
+    snapshot_at: Optional[datetime] = None
 
 
 class TotalsDetailOut(BaseModel):
