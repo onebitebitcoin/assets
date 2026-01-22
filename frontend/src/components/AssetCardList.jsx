@@ -42,12 +42,24 @@ const AssetCardList = ({
   cancelEdit,
   saveEdit,
   handleDelete,
-  isMobile
+  isMobile,
+  categoryLabel,
+  categoryAssetIds
 }) => {
   const [cardHistoryOpen, setCardHistoryOpen] = useState({});
 
   const getCardPeriods = (key) =>
     isMobile && !cardHistoryOpen[key] ? periodTotals.slice(0, 1) : periodTotals.slice(0, 7);
+
+  // 카테고리별 총합 계산 함수
+  const getCategoryTotal = (row) => {
+    if (!categoryAssetIds || categoryAssetIds.size === 0) {
+      return row.total_krw;
+    }
+    return (row.assets || [])
+      .filter((asset) => categoryAssetIds.has(asset.id))
+      .reduce((sum, asset) => sum + (asset.total_krw || 0), 0);
+  };
 
   return (
     <div className="asset-table-cards">
@@ -144,18 +156,20 @@ const AssetCardList = ({
       <article className="asset-change-card">
         <div className="asset-change-header">
           <div>
-            <h4>총 자산</h4>
+            <h4>{categoryLabel || "총 자산"}</h4>
             <p className="asset-change-meta muted">요약</p>
           </div>
         </div>
         <div className="asset-change-body">
           {getCardPeriods("total").map((row, index) => {
+            const currentTotal = getCategoryTotal(row);
             const prev = periodTotals[index + 1];
-            const totalClass = getDeltaClass(row.total_krw, prev?.total_krw);
+            const prevTotal = prev ? getCategoryTotal(prev) : null;
+            const totalClass = getDeltaClass(currentTotal, prevTotal);
             return (
               <div key={`total-${row.period_start}-${index}`} className="asset-change-row">
                 <span className="asset-change-date">{formatAxisDate(row.period_start)}</span>
-                <span className={totalClass}>{formatKRW(row.total_krw)}</span>
+                <span className={totalClass}>{formatKRW(currentTotal)}</span>
               </div>
             );
           })}

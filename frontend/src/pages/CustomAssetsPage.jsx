@@ -77,7 +77,9 @@ const CustomAssetsPage = () => {
         assets.setNewAssetForm((prev) => ({ ...prev, asset_type: "custom" }));
       }
     },
-    isMobile
+    isMobile,
+    categoryLabel: "기타 자산 합계",
+    categoryAssetIds: customIds
   };
 
   return (

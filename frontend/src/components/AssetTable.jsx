@@ -46,8 +46,19 @@ const AssetTable = ({
   showSmallAssets,
   setShowSmallAssets,
   smallAssetCount,
-  setAddingNew
+  setAddingNew,
+  categoryLabel,
+  categoryAssetIds
 }) => {
+  // 카테고리별 총합 계산 함수
+  const getCategoryTotal = (row) => {
+    if (!categoryAssetIds || categoryAssetIds.size === 0) {
+      return row.total_krw;
+    }
+    return (row.assets || [])
+      .filter((asset) => categoryAssetIds.has(asset.id))
+      .reduce((sum, asset) => sum + (asset.total_krw || 0), 0);
+  };
   return (
     <section className="panel">
       <div className="panel-header">
@@ -196,17 +207,19 @@ const AssetTable = ({
                 </tr>
               )}
               <tr>
-                <td className="asset-name-col">총 자산</td>
+                <td className="asset-name-col">{categoryLabel || "총 자산"}</td>
                 <td>-</td>
                 <td>-</td>
                 <td>-</td>
                 <td>-</td>
                 {periodTotals.map((row, index) => {
+                  const currentTotal = getCategoryTotal(row);
                   const prev = periodTotals[index + 1];
-                  const totalClass = getDeltaClass(row.total_krw, prev?.total_krw);
+                  const prevTotal = prev ? getCategoryTotal(prev) : null;
+                  const totalClass = getDeltaClass(currentTotal, prevTotal);
                   return (
                     <td key={`${row.period_start}-${index}`} className={totalClass}>
-                      {formatKRW(row.total_krw)}
+                      {formatKRW(currentTotal)}
                     </td>
                   );
                 })}

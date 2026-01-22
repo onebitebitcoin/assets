@@ -76,7 +76,9 @@ const KRStocksPage = () => {
         assets.setNewAssetForm((prev) => ({ ...prev, asset_type: "kr_stock" }));
       }
     },
-    isMobile
+    isMobile,
+    categoryLabel: "한국 주식 합계",
+    categoryAssetIds: krStockIds
   };
 
   return (

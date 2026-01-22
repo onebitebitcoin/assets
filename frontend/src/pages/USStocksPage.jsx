@@ -76,7 +76,9 @@ const USStocksPage = () => {
         assets.setNewAssetForm((prev) => ({ ...prev, asset_type: "stock" }));
       }
     },
-    isMobile
+    isMobile,
+    categoryLabel: "미국 주식 합계",
+    categoryAssetIds: usStockIds
   };
 
   return (

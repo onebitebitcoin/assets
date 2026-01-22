@@ -76,7 +76,9 @@ const CryptoPage = () => {
         assets.setNewAssetForm((prev) => ({ ...prev, asset_type: "crypto" }));
       }
     },
-    isMobile
+    isMobile,
+    categoryLabel: "비트코인 합계",
+    categoryAssetIds: cryptoIds
   };
 
   return (
