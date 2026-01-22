@@ -677,13 +677,23 @@ const Dashboard = () => {
               )}
             </p>
           </div>
-          <input
-            type="text"
-            placeholder="자산 검색 (이름, 심볼)"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="asset-search-input"
-          />
+          <div className="panel-header-actions">
+            <input
+              type="text"
+              placeholder="자산 검색 (이름, 심볼)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="asset-search-input"
+            />
+            <button
+              type="button"
+              className="primary small"
+              onClick={() => setAddingNew(true)}
+              disabled={addingNew}
+            >
+              <i className="fa-solid fa-plus" /> 자산 추가
+            </button>
+          </div>
         </div>
         {smallAssetCount > 0 && (
           <button

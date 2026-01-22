@@ -524,6 +524,13 @@ button:disabled {
   gap: 0.3rem;
 }
 
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
 .asset-panel-actions {
   display: flex;
   align-items: center;
