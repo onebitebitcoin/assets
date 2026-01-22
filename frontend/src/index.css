@@ -1207,6 +1207,7 @@ button:disabled {
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+  overflow: hidden;
 }
 
 .recent-update-name {
@@ -1215,6 +1216,8 @@ button:disabled {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
 }
 
 .recent-update-name .muted {
@@ -1233,15 +1236,17 @@ button:disabled {
 
 .recent-update-prices {
   display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 140px;
+  flex-direction: column;
+  gap: 0.125rem;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 100px;
+  flex-shrink: 0;
 }
 
 .recent-update-usd {
   color: #94a3b8;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
 }
 
 .recent-update-krw {
@@ -1254,6 +1259,7 @@ button:disabled {
   font-size: 0.75rem;
   color: #94a3b8;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .recent-update-source {
@@ -1281,13 +1287,14 @@ button:disabled {
   .recent-update-info {
     grid-column: 1;
     grid-row: 1;
+    overflow: hidden;
   }
 
   .recent-update-prices {
     grid-column: 2;
     grid-row: 1;
-    min-width: auto;
-    justify-content: flex-end;
+    min-width: 80px;
+    align-items: flex-end;
   }
 
   .recent-update-item .icon-btn.small {
