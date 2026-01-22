@@ -135,8 +135,8 @@ const Dashboard = () => {
       setError("티커를 입력해주세요.");
       return;
     }
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      setError("수량은 1 이상의 정수만 가능합니다.");
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setError("수량은 0보다 큰 숫자만 가능합니다.");
       return;
     }
     setSaving(true);
@@ -183,8 +183,8 @@ const Dashboard = () => {
       setError("이름을 입력해주세요.");
       return;
     }
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      setError("수량은 1 이상의 정수만 가능합니다.");
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setError("수량은 0보다 큰 숫자만 가능합니다.");
       return;
     }
     const isCustom = newAssetForm.asset_type === "custom";
@@ -721,8 +721,8 @@ const Dashboard = () => {
                         <input
                           type="number"
                           className="asset-edit-input asset-edit-input-small"
-                          min="1"
-                          step="1"
+                          min="0"
+                          step="any"
                           value={newAssetForm.quantity}
                           onChange={(e) => setNewAssetForm((prev) => ({ ...prev, quantity: e.target.value }))}
                         />
@@ -827,8 +827,8 @@ const Dashboard = () => {
                             <input
                               type="number"
                               className="asset-edit-input asset-edit-input-small"
-                              min="1"
-                              step="1"
+                              min="0"
+                              step="any"
                               value={editForm.quantity}
                               onChange={(e) => setEditForm((prev) => ({ ...prev, quantity: e.target.value }))}
                             />
@@ -960,8 +960,8 @@ const Dashboard = () => {
                       수량
                       <input
                         type="number"
-                        min="1"
-                        step="1"
+                        min="0"
+                        step="any"
                         value={newAssetForm.quantity}
                         onChange={(e) => setNewAssetForm((prev) => ({ ...prev, quantity: e.target.value }))}
                       />
@@ -1070,8 +1070,8 @@ const Dashboard = () => {
                                 type="number"
                                 className="asset-edit-input"
                                 style={{ width: "80px" }}
-                                min="1"
-                                step="1"
+                                min="0"
+                                step="any"
                                 value={editForm.quantity}
                                 onChange={(e) => setEditForm((prev) => ({ ...prev, quantity: e.target.value }))}
                               />
