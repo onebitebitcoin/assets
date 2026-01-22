@@ -177,3 +177,5 @@ export const fetchTotals = (period = "daily", limit = 12, offset = 0) =>
 export const fetchTotalsDetail = (period = "daily", limit = 10, offset = 0) =>
   request(`/totals/detail?period=${period}&limit=${limit}&offset=${offset}`);
 export const snapshotTotals = () => request("/totals/snapshot", { method: "POST" });
+export const lookupSymbol = (symbol, assetType = "stock") =>
+  request(`/lookup?symbol=${encodeURIComponent(symbol)}&asset_type=${assetType}`);

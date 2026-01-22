@@ -17,6 +17,7 @@ import {
   deleteAsset,
   fetchSummary,
   fetchTotalsDetail,
+  lookupSymbol,
   refreshSummary,
   snapshotTotals,
   updateAsset
@@ -56,6 +57,8 @@ const Dashboard = () => {
     name: "", symbol: "", asset_type: "stock", quantity: 1, custom_type: "", price_krw: ""
   });
   const [saving, setSaving] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
+  const lookupTimeoutRef = useRef(null);
   const [showSmallAssets, setShowSmallAssets] = useState(false);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") {
@@ -128,6 +131,38 @@ const Dashboard = () => {
   const cancelEdit = () => {
     setEditingAssetId(null);
     setEditForm({ name: "", symbol: "", quantity: "", price_krw: "" });
+  };
+
+  // 심볼 입력 시 종목명 자동완성
+  const handleSymbolChange = (symbol) => {
+    setNewAssetForm((prev) => ({ ...prev, symbol }));
+
+    // 기존 타이머 취소
+    if (lookupTimeoutRef.current) {
+      clearTimeout(lookupTimeoutRef.current);
+    }
+
+    // 주식 타입이 아니거나 심볼이 비어있으면 조회하지 않음
+    const assetType = newAssetForm.asset_type;
+    if (!["stock", "kr_stock"].includes(assetType) || !symbol.trim()) {
+      return;
+    }
+
+    // 디바운스: 500ms 후 API 호출
+    lookupTimeoutRef.current = setTimeout(async () => {
+      setLookingUp(true);
+      try {
+        const result = await lookupSymbol(symbol.trim(), assetType);
+        // 종목명이 비어있을 때만 자동완성
+        if (result.name && !newAssetForm.name.trim()) {
+          setNewAssetForm((prev) => ({ ...prev, name: result.name }));
+        }
+      } catch {
+        // 조회 실패 시 무시 (사용자가 직접 입력)
+      } finally {
+        setLookingUp(false);
+      }
+    }, 500);
   };
 
   const saveEdit = async (assetId) => {
@@ -784,7 +819,7 @@ const Dashboard = () => {
                             className="asset-edit-input asset-edit-input-small"
                             placeholder="심볼"
                             value={newAssetForm.symbol}
-                            onChange={(e) => setNewAssetForm((prev) => ({ ...prev, symbol: e.target.value }))}
+                            onChange={(e) => handleSymbolChange(e.target.value)}
                           />
                         )}
                       </td>
@@ -1005,7 +1040,7 @@ const Dashboard = () => {
                           type="text"
                           placeholder="AAPL"
                           value={newAssetForm.symbol}
-                          onChange={(e) => setNewAssetForm((prev) => ({ ...prev, symbol: e.target.value }))}
+                          onChange={(e) => handleSymbolChange(e.target.value)}
                         />
                       </label>
                     )}

@@ -37,6 +37,14 @@ class PriceResult:
 
 
 @dataclass
+class SymbolLookupResult:
+    """심볼 조회 결과"""
+    symbol: str
+    name: str
+    asset_type: str  # "stock" | "kr_stock"
+
+
+@dataclass
 class SnapshotPriceResult:
     """스냅샷용 가격 조회 결과"""
     price_krw: float
@@ -475,3 +483,69 @@ async def get_snapshot_prices(assets: list[tuple[str, str]]) -> dict[str, Snapsh
     logger.info("[Snapshot] Price fetch completed: %s (US market open: %s)", source_counts, us_market_open)
 
     return results
+
+
+async def lookup_us_stock_name(symbol: str) -> Optional[str]:
+    """Finnhub API에서 미국주식 종목명 조회"""
+    if not settings.finnhub_api_key:
+        logger.debug("[Finnhub] API key not configured for lookup")
+        return None
+
+    url = f"{FINNHUB_BASE_URL}/stock/profile2"
+    params = {"symbol": symbol.upper(), "token": settings.finnhub_api_key}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            name = data.get("name")
+            if not name:
+                logger.warning("[Finnhub] No name found for %s", symbol)
+                return None
+
+            logger.info("[Finnhub] %s: %s", symbol, name)
+            return name
+    except Exception as exc:
+        logger.warning("[Finnhub] Lookup failed for %s: %s", symbol, exc)
+        return None
+
+
+def _lookup_kr_stock_name(symbol: str) -> Optional[str]:
+    """pykrx에서 한국주식 종목명 조회 (동기 함수)"""
+    from pykrx import stock
+
+    try:
+        clean_symbol = symbol.split('.')[0]
+        name = stock.get_market_ticker_name(clean_symbol)
+        if name:
+            logger.info("[pykrx] %s: %s", symbol, name)
+            return name
+        return None
+    except Exception as exc:
+        logger.warning("[pykrx] Lookup failed for %s: %s", symbol, exc)
+        return None
+
+
+async def lookup_symbol(symbol: str, asset_type: str) -> Optional[SymbolLookupResult]:
+    """심볼로 종목명 조회
+
+    Args:
+        symbol: 종목 심볼
+        asset_type: "stock" 또는 "kr_stock"
+
+    Returns:
+        SymbolLookupResult 또는 None (실패 시)
+    """
+    if asset_type == "stock":
+        name = await lookup_us_stock_name(symbol)
+        if name:
+            return SymbolLookupResult(symbol=symbol.upper(), name=name, asset_type="stock")
+
+    elif asset_type == "kr_stock":
+        name = await asyncio.to_thread(_lookup_kr_stock_name, symbol)
+        if name:
+            return SymbolLookupResult(symbol=symbol, name=name, asset_type="kr_stock")
+
+    return None

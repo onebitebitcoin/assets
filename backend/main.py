@@ -50,7 +50,7 @@ from .schemas import (
     TotalPointDetailOut,
     TotalsDetailOut,
 )
-from .services.pricing import get_price_krw, get_price_krw_batch, get_snapshot_prices
+from .services.pricing import get_price_krw, get_price_krw_batch, get_snapshot_prices, lookup_symbol
 SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 
@@ -161,6 +161,37 @@ def list_assets(
 ):
     assets = db.scalars(select(Asset).where(Asset.user_id == user.id)).all()
     return [asset_to_out(asset) for asset in assets]
+
+
+@app.get("/lookup")
+async def lookup_stock_symbol(
+    symbol: str,
+    asset_type: str = "stock",
+    user: Annotated[User, Depends(get_current_user)] = None,
+):
+    """심볼로 종목명 조회
+
+    Args:
+        symbol: 종목 심볼 (예: AAPL, 005930)
+        asset_type: "stock" (미국주식) 또는 "kr_stock" (한국주식)
+
+    Returns:
+        {"symbol": "AAPL", "name": "Apple Inc", "asset_type": "stock"}
+    """
+    if asset_type not in {"stock", "kr_stock"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="asset_type must be 'stock' or 'kr_stock'"
+        )
+
+    result = await lookup_symbol(symbol, asset_type)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Symbol not found: {symbol}"
+        )
+
+    return {"symbol": result.symbol, "name": result.name, "asset_type": result.asset_type}
 
 
 @app.post("/assets", response_model=AssetOut)
