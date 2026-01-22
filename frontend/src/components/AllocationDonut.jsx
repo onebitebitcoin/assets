@@ -77,7 +77,7 @@ const AllocationDonut = ({ assets }) => {
         callbacks: {
           label: (context) => {
             const amount = allocationAmounts[context.dataIndex];
-            return `${context.label}: ${context.parsed}% (${formatKRW(amount)})`;
+            return [`${context.label}: ${context.parsed}%`, formatKRW(amount)];
           }
         }
       }
