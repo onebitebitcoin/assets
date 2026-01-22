@@ -50,7 +50,7 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [cardHistoryOpen, setCardHistoryOpen] = useState({});
   const [editingAssetId, setEditingAssetId] = useState(null);
-  const [editForm, setEditForm] = useState({ name: "", symbol: "", quantity: "" });
+  const [editForm, setEditForm] = useState({ name: "", symbol: "", quantity: "", price_krw: "" });
   const [addingNew, setAddingNew] = useState(false);
   const [newAssetForm, setNewAssetForm] = useState({
     name: "", symbol: "", asset_type: "stock", quantity: 1, custom_type: "", price_krw: ""
@@ -117,16 +117,24 @@ const Dashboard = () => {
   // 인라인 편집 핸들러
   const startEdit = (asset) => {
     setEditingAssetId(asset.id);
-    setEditForm({ name: asset.name, symbol: asset.symbol || "", quantity: String(asset.quantity) });
+    setEditForm({
+      name: asset.name,
+      symbol: asset.symbol || "",
+      quantity: String(asset.quantity),
+      price_krw: asset.last_price_krw ? String(asset.last_price_krw) : ""
+    });
   };
 
   const cancelEdit = () => {
     setEditingAssetId(null);
-    setEditForm({ name: "", symbol: "", quantity: "" });
+    setEditForm({ name: "", symbol: "", quantity: "", price_krw: "" });
   };
 
   const saveEdit = async (assetId) => {
     const quantity = Number(editForm.quantity);
+    const currentAsset = summary.assets.find((a) => a.id === assetId);
+    const isCustom = currentAsset && !["stock", "crypto", "kr_stock", "cash"].includes(currentAsset.asset_type?.toLowerCase());
+
     if (!editForm.name.trim()) {
       setError("이름을 입력해주세요.");
       return;
@@ -139,6 +147,16 @@ const Dashboard = () => {
       setError("수량은 0보다 큰 숫자만 가능합니다.");
       return;
     }
+
+    let priceValue = null;
+    if (isCustom && editForm.price_krw) {
+      priceValue = Number(editForm.price_krw);
+      if (!Number.isFinite(priceValue) || priceValue <= 0) {
+        setError("단가는 0보다 큰 숫자만 가능합니다.");
+        return;
+      }
+    }
+
     setSaving(true);
     setError("");
     // Optimistic Update
@@ -146,11 +164,22 @@ const Dashboard = () => {
     setSummary((prev) => ({
       ...prev,
       assets: prev.assets.map((a) =>
-        a.id === assetId ? { ...a, name: editForm.name.trim(), symbol: editForm.symbol.trim(), quantity } : a
+        a.id === assetId ? {
+          ...a,
+          name: editForm.name.trim(),
+          symbol: editForm.symbol.trim(),
+          quantity,
+          ...(priceValue ? { last_price_krw: priceValue } : {})
+        } : a
       )
     }));
     try {
-      await updateAsset(assetId, { name: editForm.name.trim(), symbol: editForm.symbol.trim(), quantity });
+      await updateAsset(assetId, {
+        name: editForm.name.trim(),
+        symbol: editForm.symbol.trim(),
+        quantity,
+        ...(priceValue ? { price_krw: priceValue } : {})
+      });
       setSuccess("저장되었습니다.");
       cancelEdit();
     } catch (err) {
@@ -839,6 +868,20 @@ const Dashboard = () => {
                         <td>
                           {(() => {
                             const assetType = meta?.asset_type?.toLowerCase();
+                            const isCustomAsset = !["stock", "crypto", "kr_stock", "cash"].includes(assetType);
+                            if (isEditing && isCustomAsset) {
+                              return (
+                                <input
+                                  type="number"
+                                  className="asset-edit-input asset-edit-input-small"
+                                  min="0"
+                                  step="any"
+                                  placeholder="단가(원)"
+                                  value={editForm.price_krw}
+                                  onChange={(e) => setEditForm((prev) => ({ ...prev, price_krw: e.target.value }))}
+                                />
+                              );
+                            }
                             if (assetType === "crypto" || assetType === "kr_stock") {
                               return meta?.last_price_krw ? formatKRW(meta.last_price_krw) : "-";
                             }
@@ -1076,6 +1119,21 @@ const Dashboard = () => {
                                 onChange={(e) => setEditForm((prev) => ({ ...prev, quantity: e.target.value }))}
                               />
                             </div>
+                            {!["stock", "crypto", "kr_stock", "cash"].includes(meta?.asset_type?.toLowerCase()) && (
+                              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+                                <span className="muted">단가:</span>
+                                <input
+                                  type="number"
+                                  className="asset-edit-input"
+                                  style={{ width: "100px" }}
+                                  min="0"
+                                  step="any"
+                                  placeholder="원"
+                                  value={editForm.price_krw}
+                                  onChange={(e) => setEditForm((prev) => ({ ...prev, price_krw: e.target.value }))}
+                                />
+                              </div>
+                            )}
                           </>
                         ) : (
                           <>
