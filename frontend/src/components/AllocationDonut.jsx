@@ -5,6 +5,7 @@ import {
   Tooltip
 } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
+import { formatKRW } from "../utils/format.js";
 
 ChartJS.register(ArcElement, Legend, Tooltip);
 
@@ -40,9 +41,10 @@ const AllocationDonut = ({ assets }) => {
 
   const totalPortfolioValue = Object.values(allocationTotals).reduce((sum, value) => sum + value, 0);
   const allocationEntries = allocationCategories.map((label) => {
+    const amount = allocationTotals[label];
     const share =
-      totalPortfolioValue > 0 ? Math.round((allocationTotals[label] / totalPortfolioValue) * 1000) / 10 : 0;
-    return { label, share };
+      totalPortfolioValue > 0 ? Math.round((amount / totalPortfolioValue) * 1000) / 10 : 0;
+    return { label, share, amount };
   });
   allocationEntries.sort((a, b) => b.share - a.share);
 
@@ -50,6 +52,7 @@ const AllocationDonut = ({ assets }) => {
   const filteredAllocationEntries = allocationEntries.filter((entry) => entry.share > 0);
   const allocationLabels = filteredAllocationEntries.map((entry) => entry.label);
   const allocationShares = filteredAllocationEntries.map((entry) => entry.share);
+  const allocationAmounts = filteredAllocationEntries.map((entry) => entry.amount);
   const allocationColors = filteredAllocationEntries.map((entry) => allocationColorMap[entry.label]);
 
   const allocationData = {
@@ -72,7 +75,10 @@ const AllocationDonut = ({ assets }) => {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (context) => `${context.label}: ${context.parsed}%`
+          label: (context) => {
+            const amount = allocationAmounts[context.dataIndex];
+            return `${context.label}: ${context.parsed}% (${formatKRW(amount)})`;
+          }
         }
       }
     }
