@@ -400,20 +400,20 @@ async def get_snapshot_prices(assets: list[tuple[str, str]]) -> dict[str, Snapsh
             crypto_symbols.append(symbol)
 
     async with httpx.AsyncClient() as client:
-        # 1. 한국 주식: 전일 종가 조회
-        async def fetch_kr_stock_previous(symbol: str) -> tuple[str, Optional[SnapshotPriceResult]]:
+        # 1. 한국 주식: 오늘(또는 최근) 종가 조회
+        async def fetch_kr_stock_snapshot(symbol: str) -> tuple[str, Optional[SnapshotPriceResult]]:
             try:
                 clean_symbol = symbol.split('.')[0]
                 price = await asyncio.to_thread(
-                    _fetch_krx_previous_close_price, clean_symbol, today_kr
+                    _fetch_krx_close_price, clean_symbol
                 )
                 return symbol, SnapshotPriceResult(
                     price_krw=price,
                     source="pykrx",
-                    note="전일 종가",
+                    note="종가",
                 )
             except Exception as exc:
-                logger.warning("[Snapshot] KR stock previous close failed for %s: %s", symbol, exc)
+                logger.warning("[Snapshot] KR stock close failed for %s: %s", symbol, exc)
                 return symbol, None
 
         # 2. 미국 주식 또는 암호화폐가 있으면 환율 조회
@@ -466,7 +466,7 @@ async def get_snapshot_prices(assets: list[tuple[str, str]]) -> dict[str, Snapsh
 
         # 병렬 실행
         all_tasks = []
-        all_tasks.extend([fetch_kr_stock_previous(s) for s in kr_stock_symbols])
+        all_tasks.extend([fetch_kr_stock_snapshot(s) for s in kr_stock_symbols])
         all_tasks.extend([fetch_us_stock(s) for s in us_stock_symbols])
         all_tasks.extend([fetch_crypto(s) for s in crypto_symbols])
 
