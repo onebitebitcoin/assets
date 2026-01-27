@@ -23,6 +23,14 @@ const formatQuantity = (value) => {
   }).format(rounded);
 };
 
+const categoryConfig = [
+  { key: "total", label: "총자산", filter: () => true },
+  { key: "crypto", label: "비트코인", filter: (type) => type === "crypto" },
+  { key: "stock", label: "해외주식", filter: (type) => type === "stock" },
+  { key: "kr_stock", label: "국내주식", filter: (type) => type === "kr_stock" },
+  { key: "other", label: "기타자산", filter: (type) => !["crypto", "stock", "kr_stock"].includes(type) }
+];
+
 const AssetTable = ({
   periodTotals,
   filteredTableColumns,
@@ -48,7 +56,8 @@ const AssetTable = ({
   smallAssetCount,
   setAddingNew,
   categoryLabel,
-  categoryAssetIds
+  categoryAssetIds,
+  summaryMode = false
 }) => {
   // 카테고리별 총합 계산 함수
   const getCategoryTotal = (row) => {
@@ -57,6 +66,20 @@ const AssetTable = ({
     }
     return (row.assets || [])
       .filter((asset) => categoryAssetIds.has(asset.id))
+      .reduce((sum, asset) => sum + (asset.total_krw || 0), 0);
+  };
+
+  // 카테고리별 총합 계산 (summaryMode용)
+  const getCategoryTotalByType = (row, filterFn) => {
+    if (filterFn === categoryConfig[0].filter) {
+      return row.total_krw;
+    }
+    return (row.assets || [])
+      .filter((asset) => {
+        const meta = assetMetaById.get(asset.id);
+        const type = meta?.asset_type?.toLowerCase() || "";
+        return filterFn(type);
+      })
       .reduce((sum, asset) => sum + (asset.total_krw || 0), 0);
   };
   return (
@@ -71,25 +94,27 @@ const AssetTable = ({
             )}
           </p>
         </div>
-        <div className="panel-header-actions">
-          <input
-            type="text"
-            placeholder="자산 검색 (이름, 심볼)"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="asset-search-input"
-          />
-          <button
-            type="button"
-            className="primary small"
-            onClick={() => setAddingNew(true)}
-            disabled={addingNew}
-          >
-            <i className="fa-solid fa-plus" /> 자산 추가
-          </button>
-        </div>
+        {!summaryMode && (
+          <div className="panel-header-actions">
+            <input
+              type="text"
+              placeholder="자산 검색 (이름, 심볼)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="asset-search-input"
+            />
+            <button
+              type="button"
+              className="primary small"
+              onClick={() => setAddingNew(true)}
+              disabled={addingNew}
+            >
+              <i className="fa-solid fa-plus" /> 자산 추가
+            </button>
+          </div>
+        )}
       </div>
-      {smallAssetCount > 0 && (
+      {!summaryMode && smallAssetCount > 0 && (
         <button
           type="button"
           className="ghost small toggle-small-assets"
@@ -105,18 +130,34 @@ const AssetTable = ({
           <table className="asset-table">
             <thead>
               <tr>
-                <th className="asset-name-col">종목</th>
-                <th>수량</th>
-                <th>현재가</th>
-                <th>소스</th>
-                <th>작업</th>
+                <th className="asset-name-col">{summaryMode ? "구분" : "종목"}</th>
+                {!summaryMode && <th>수량</th>}
+                {!summaryMode && <th>현재가</th>}
+                {!summaryMode && <th>소스</th>}
+                {!summaryMode && <th>작업</th>}
                 {periodTotals.map((row, index) => (
                   <th key={`${row.period_start}-${index}`}>{formatAxisDate(row.period_start)}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {addingNew && (
+              {summaryMode && categoryConfig.map((cat) => (
+                <tr key={cat.key} className={cat.key === "total" ? "summary-total-row" : ""}>
+                  <td className="asset-name-col">{cat.label}</td>
+                  {periodTotals.map((row, index) => {
+                    const currentTotal = getCategoryTotalByType(row, cat.filter);
+                    const prev = periodTotals[index + 1];
+                    const prevTotal = prev ? getCategoryTotalByType(prev, cat.filter) : null;
+                    const totalClass = getDeltaClass(currentTotal, prevTotal);
+                    return (
+                      <td key={`${cat.key}-${row.period_start}-${index}`} className={totalClass}>
+                        {formatKRW(currentTotal)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {!summaryMode && addingNew && (
                 <tr className="asset-add-row">
                   <td className="asset-name-col">
                     <input
@@ -206,25 +247,27 @@ const AssetTable = ({
                   ))}
                 </tr>
               )}
-              <tr>
-                <td className="asset-name-col">{categoryLabel || "총 자산"}</td>
-                <td>-</td>
-                <td>-</td>
-                <td>-</td>
-                <td>-</td>
-                {periodTotals.map((row, index) => {
-                  const currentTotal = getCategoryTotal(row);
-                  const prev = periodTotals[index + 1];
-                  const prevTotal = prev ? getCategoryTotal(prev) : null;
-                  const totalClass = getDeltaClass(currentTotal, prevTotal);
-                  return (
-                    <td key={`${row.period_start}-${index}`} className={totalClass}>
-                      {formatKRW(currentTotal)}
-                    </td>
-                  );
-                })}
-              </tr>
-              {filteredTableColumns.map((asset) => {
+              {!summaryMode && (
+                <tr>
+                  <td className="asset-name-col">{categoryLabel || "총 자산"}</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                  {periodTotals.map((row, index) => {
+                    const currentTotal = getCategoryTotal(row);
+                    const prev = periodTotals[index + 1];
+                    const prevTotal = prev ? getCategoryTotal(prev) : null;
+                    const totalClass = getDeltaClass(currentTotal, prevTotal);
+                    return (
+                      <td key={`${row.period_start}-${index}`} className={totalClass}>
+                        {formatKRW(currentTotal)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              )}
+              {!summaryMode && filteredTableColumns.map((asset) => {
                 const meta = assetMetaById.get(asset.id);
                 const isEditing = editingAssetId === asset.id;
                 return (

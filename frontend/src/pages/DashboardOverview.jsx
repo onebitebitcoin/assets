@@ -89,7 +89,8 @@ const DashboardOverview = () => {
     setAddingNew: assets.setAddingNew,
     isMobile,
     categoryLabel: "총 자산",
-    categoryAssetIds: null
+    categoryAssetIds: null,
+    summaryMode: true
   };
 
   const assetLastUpdatedTimes = summary.assets
