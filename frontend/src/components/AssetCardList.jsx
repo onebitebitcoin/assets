@@ -24,6 +24,14 @@ const formatQuantity = (value) => {
   }).format(rounded);
 };
 
+const categoryConfig = [
+  { key: "total", label: "총자산", filter: () => true },
+  { key: "crypto", label: "비트코인", filter: (type) => type === "crypto" },
+  { key: "stock", label: "해외주식", filter: (type) => type === "stock" },
+  { key: "kr_stock", label: "국내주식", filter: (type) => type === "kr_stock" },
+  { key: "other", label: "기타자산", filter: (type) => !["crypto", "stock", "kr_stock"].includes(type) }
+];
+
 const AssetCardList = ({
   periodTotals,
   filteredTableColumns,
@@ -44,7 +52,8 @@ const AssetCardList = ({
   handleDelete,
   isMobile,
   categoryLabel,
-  categoryAssetIds
+  categoryAssetIds,
+  summaryMode = false
 }) => {
   const [cardHistoryOpen, setCardHistoryOpen] = useState({});
 
@@ -60,6 +69,65 @@ const AssetCardList = ({
       .filter((asset) => categoryAssetIds.has(asset.id))
       .reduce((sum, asset) => sum + (asset.total_krw || 0), 0);
   };
+
+  // 카테고리별 총합 계산 (summaryMode용)
+  const getCategoryTotalByType = (row, filterFn) => {
+    if (filterFn === categoryConfig[0].filter) {
+      return row.total_krw;
+    }
+    return (row.assets || [])
+      .filter((asset) => {
+        const meta = assetMetaById.get(asset.id);
+        const type = meta?.asset_type?.toLowerCase() || "";
+        return filterFn(type);
+      })
+      .reduce((sum, asset) => sum + (asset.total_krw || 0), 0);
+  };
+
+  if (summaryMode) {
+    return (
+      <div className="asset-table-cards">
+        {categoryConfig.map((cat) => (
+          <article key={cat.key} className="asset-change-card">
+            <div className="asset-change-header">
+              <div>
+                <h4>{cat.label}</h4>
+                <p className="asset-change-meta muted">요약</p>
+              </div>
+            </div>
+            <div className="asset-change-body">
+              {getCardPeriods(cat.key).map((row, index) => {
+                const currentTotal = getCategoryTotalByType(row, cat.filter);
+                const prev = periodTotals[index + 1];
+                const prevTotal = prev ? getCategoryTotalByType(prev, cat.filter) : null;
+                const totalClass = getDeltaClass(currentTotal, prevTotal);
+                return (
+                  <div key={`${cat.key}-${row.period_start}-${index}`} className="asset-change-row">
+                    <span className="asset-change-date">{formatAxisDate(row.period_start)}</span>
+                    <span className={totalClass}>{formatKRW(currentTotal)}</span>
+                  </div>
+                );
+              })}
+              {periodTotals.length > 1 ? (
+                <button
+                  type="button"
+                  className="ghost small asset-card-toggle"
+                  onClick={() =>
+                    setCardHistoryOpen((prev) => ({
+                      ...prev,
+                      [cat.key]: !prev[cat.key]
+                    }))
+                  }
+                >
+                  {cardHistoryOpen[cat.key] ? "접기" : "더보기"}
+                </button>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="asset-table-cards">
