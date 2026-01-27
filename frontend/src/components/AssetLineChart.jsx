@@ -237,7 +237,7 @@ const AssetLineChart = ({
               <h3>자산 유형별 변화 추이</h3>
             </div>
           </div>
-          <div className="chart-canvas">
+          <div className="chart-canvas" style={{ height: "280px" }}>
             <Line data={categoryChartData} options={categoryChartOptions} />
           </div>
         </>
