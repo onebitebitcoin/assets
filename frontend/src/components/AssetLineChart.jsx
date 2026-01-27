@@ -221,7 +221,7 @@ const AssetLineChart = ({
           <span className="chart-tag">{periodLabels[period]}</span>
         </div>
       </div>
-      <div className="chart-canvas">
+      <div className="chart-canvas" style={{ height: "280px" }}>
         {chartValues.length ? (
           <Line data={chartData} options={chartOptions} />
         ) : (
