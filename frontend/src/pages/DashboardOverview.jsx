@@ -121,6 +121,7 @@ const DashboardOverview = () => {
             onPeriodChange={changePeriod}
             onSnapshot={() => onSnapshot(loadSummary)}
             onLoadMore={loadMore}
+            assetMetaById={assetMetaById}
           />
           <AllocationDonut assets={summary.assets} />
         </div>

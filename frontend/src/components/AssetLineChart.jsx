@@ -37,6 +37,18 @@ const formatAxisKrw = (value) => {
   return `${amount.toFixed(1)}억`;
 };
 
+const categoryColors = {
+  stock: { border: "#60a5fa", bg: "rgba(96, 165, 250, 0.15)" },
+  kr_stock: { border: "#f97316", bg: "rgba(249, 115, 22, 0.15)" },
+  crypto: { border: "#fbbf24", bg: "rgba(251, 191, 36, 0.15)" }
+};
+
+const categoryLabels = {
+  stock: "미국주식",
+  kr_stock: "한국주식",
+  crypto: "비트코인"
+};
+
 const AssetLineChart = ({
   period,
   periodTotals,
@@ -45,11 +57,32 @@ const AssetLineChart = ({
   snapshotLoading,
   onPeriodChange,
   onSnapshot,
-  onLoadMore
+  onLoadMore,
+  assetMetaById
 }) => {
   const chartSeries = [...periodTotals].reverse();
   const chartValues = chartSeries.map((item) => item.total_krw || 0);
   const chartLabels = chartSeries.map((item) => formatAxisDate(item.period_start));
+
+  // 카테고리별 총합 계산
+  const categoryTotals = { stock: [], kr_stock: [], crypto: [] };
+  for (const point of chartSeries) {
+    const totals = { stock: 0, kr_stock: 0, crypto: 0 };
+    if (point.assets && assetMetaById) {
+      for (const asset of point.assets) {
+        const meta = assetMetaById.get(asset.id);
+        if (meta) {
+          const type = meta.asset_type?.toLowerCase();
+          if (type in totals) {
+            totals[type] += asset.total_krw || 0;
+          }
+        }
+      }
+    }
+    categoryTotals.stock.push(totals.stock);
+    categoryTotals.kr_stock.push(totals.kr_stock);
+    categoryTotals.crypto.push(totals.crypto);
+  }
 
   const chartData = {
     labels: chartLabels,
@@ -65,6 +98,21 @@ const AssetLineChart = ({
         fill: true
       }
     ]
+  };
+
+  // 카테고리별 차트 데이터
+  const categoryChartData = {
+    labels: chartLabels,
+    datasets: Object.entries(categoryColors).map(([type, colors]) => ({
+      label: categoryLabels[type],
+      data: categoryTotals[type],
+      borderColor: colors.border,
+      backgroundColor: colors.bg,
+      tension: 0.35,
+      pointRadius: 3,
+      pointHoverRadius: 4,
+      fill: false
+    }))
   };
 
   const chartOptions = {
@@ -99,6 +147,51 @@ const AssetLineChart = ({
       }
     }
   };
+
+  const categoryChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: "top",
+        labels: {
+          color: "#94a3b8",
+          usePointStyle: true,
+          pointStyle: "circle",
+          padding: 16,
+          font: { size: 12 }
+        }
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.dataset.label}: ${formatAxisKrw(context.parsed.y)}`
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: "#94a3b8",
+          maxTicksLimit: 6
+        },
+        grid: {
+          display: false
+        }
+      },
+      y: {
+        ticks: {
+          color: "#94a3b8",
+          callback: (value) => formatAxisKrw(value)
+        },
+        grid: {
+          color: "rgba(148, 163, 184, 0.15)"
+        }
+      }
+    }
+  };
+
+  const hasCategoryData = assetMetaById && chartSeries.some((point) => point.assets?.length > 0);
 
   return (
     <div className="chart-section">
@@ -135,6 +228,21 @@ const AssetLineChart = ({
           <p className="muted">데이터가 없습니다.</p>
         )}
       </div>
+
+      {hasCategoryData ? (
+        <>
+          <div className="chart-header" style={{ marginTop: "1.5rem" }}>
+            <div>
+              <p className="label">카테고리별</p>
+              <h3>자산 유형별 변화 추이</h3>
+            </div>
+          </div>
+          <div className="chart-canvas">
+            <Line data={categoryChartData} options={categoryChartOptions} />
+          </div>
+        </>
+      ) : null}
+
       <div className="chart-footer">
         {periodHasMore ? (
           <button
